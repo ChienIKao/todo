@@ -45,12 +45,55 @@ async function call(name, ...args) {
 }
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
+  if (tag === "button" && attrs.title) el.setAttribute("aria-label", attrs.title);
   for (const [k, v] of Object.entries(attrs)) {
     if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
   }
   el.append(...children.flat().filter((c) => c != null && c !== false));
   return el;
+}
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(svg.namespaceURI, "use");
+  use.setAttribute("href", `pixelarticons/sprite.svg#${name}`);
+  svg.append(use);
+  return svg;
+}
+function checkbox(attrs) {
+  return h("span", { class: "slot" }, h("input", { type: "checkbox", "aria-label": attrs.title, ...attrs }), icon("check"));
+}
+const THEMES = { dark: ["黑", "moon"], light: ["白", "sun"], beige: ["米", "notebook"] };
+let themeChoice = null;
+let themeStorage = true;
+function syncTheme() {
+  try { if (themeStorage) themeChoice = localStorage.getItem("todoTheme"); } catch { /* 無法儲存時沿用本次選擇 */ }
+  const theme = THEMES[themeChoice] ? themeChoice : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = theme;
+  $("meta[name=theme-color]").content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  const button = $("#themeBtn");
+  button.title = button.ariaLabel = `目前主題：${THEMES[theme][0]}，點擊切換主題`;
+  button.replaceChildren(icon(THEMES[theme][1]));
+}
+function bindTheme() {
+  $("#themeBtn").onclick = () => {
+    const keys = Object.keys(THEMES);
+    themeChoice = keys[(keys.indexOf(document.documentElement.dataset.theme) + 1) % keys.length];
+    try { localStorage.setItem("todoTheme", themeChoice); } catch { themeStorage = false; }
+    syncTheme();
+  };
+  window.addEventListener("storage", syncTheme);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncTheme);
+  syncTheme();
+}
+function progress(subtasks) {
+  const done = subtasks.filter(s => s.done).length;
+  const count = Math.min(subtasks.length, 10);
+  return h("div", { class: "xp", role: "progressbar", "aria-label": "子任務進度", "aria-valuemin": 0,
+    "aria-valuemax": subtasks.length, "aria-valuenow": done }, Array.from({ length: count }, (_, i) =>
+    h("i", { class: i < Math.round(done / subtasks.length * count) ? "on" : "" })));
 }
 function fmtTime(iso) {
   const d = new Date(iso);
@@ -72,7 +115,7 @@ const S = {
   expanded: new Set(),
   showDone: false,
   trash: [],
-  view: localStorage.getItem("todoView") || "today",
+  view: (() => { try { return localStorage.getItem("todoView") || "today"; } catch { return "today"; } })(),
   month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   day: today(),
 };
@@ -103,6 +146,7 @@ async function reload() {
 
 // AI 或 todo 指令改了清單：輪詢資料檔的修改時間，有變就重新載入
 async function poll() {
+  syncTheme();
   if (document.hidden) return;
   try {
     const v = await api.version();
@@ -135,22 +179,23 @@ function agentPrompt(t) {
 function renderItem(t) {
   const open = S.expanded.has(t.id);
   const overdue = t.due && t.status !== "done" && t.due < today();
-  const item = h("article", { class: `item ${t.status}`, id: `todo-${t.id}` },
+  const item = h("article", { class: `item ${t.status}${t.priority === "high" ? " high" : ""}`, id: `todo-${t.id}` },
     h("div", { class: "line" },
-      h("input", { type: "checkbox", checked: t.status === "done", title: "完成",
+      checkbox({ checked: t.status === "done", title: "完成",
                    onchange: (e) => save(t.id, { status: e.target.checked ? "done" : t.reopenStatus || "todo" }) }),
       h("div", { class: "title", onclick: () => { open ? S.expanded.delete(t.id) : S.expanded.add(t.id); render(); } },
         h("span", { class: "id" }, `#${t.id}`), " ", t.title,
         h("div", { class: "badges" },
-          t.priority === "high" && h("span", { class: "badge high" }, "高"),
-          t.project && h("span", { class: "badge", title: t.project }, t.project.split(/[\\/]/).filter(Boolean).pop()),
-          t.assignee && h("span", { class: "badge who" }, `@${t.assignee}`),
-          t.due && h("span", { class: `badge${overdue ? " overdue" : t.due === today() ? " due-today" : ""}` }, t.due.slice(5)),
-          t.subtasks.length > 0 && h("span", { class: "badge" }, `☑ ${t.subtasks.filter(s => s.done).length}/${t.subtasks.length}`),
-          t.repeat && h("span", { class: "badge", title: REPEAT_LABEL[t.repeat] }, "🔁"),
-          t.remindAt && h("span", { class: "badge", title: t.remindAt }, `⏰ ${t.remindAt.slice(11)}`),
-          t.context && h("span", { class: "badge plain", title: "有背景說明" }, "📝"),
-          t.notes.length > 0 && h("span", { class: "badge plain" }, `💬${t.notes.length}`)))));
+          t.priority === "high" && h("span", { class: "badge high" }, icon("flag"), "高"),
+          t.project && h("span", { class: "badge", title: t.project }, icon("folder"), t.project.split(/[\\/]/).filter(Boolean).pop()),
+          t.assignee && h("span", { class: "badge who" }, icon("user"), `@${t.assignee}`),
+          t.due && h("span", { class: `badge${overdue ? " overdue" : t.due === today() ? " due-today" : ""}` }, icon("calendar"), t.due.slice(5)),
+          t.subtasks.length > 0 && h("span", { class: "badge" }, icon("checkbox-on"), `${t.subtasks.filter(s => s.done).length}/${t.subtasks.length}`),
+          t.repeat && h("span", { class: "badge", title: REPEAT_LABEL[t.repeat] }, icon("repeat")),
+          t.remindAt && h("span", { class: "badge", title: t.remindAt }, icon("alarm-clock"), t.remindAt.slice(11)),
+          t.context && h("span", { class: "badge plain", title: "有背景說明" }, icon("note")),
+          t.notes.length > 0 && h("span", { class: "badge plain" }, icon("message-text"), String(t.notes.length))))));
+  if (t.subtasks.length) item.querySelector(".title").append(progress(t.subtasks));
   if (open) item.append(renderDetail(t));
   bindDrag(item, t, open);
   return item;
@@ -199,7 +244,7 @@ function renderDetail(t) {
     field("提醒", h("div", { class: "row" }, text("remindAt", { type: "datetime-local" }),
       h("button", { onclick: () => save(t.id, { remindAt: "" }) }, "清除"))),
     h("div", { class: "subtasks" }, t.subtasks.map(s => h("div", { class: "subtask" },
-      h("input", { type: "checkbox", checked: s.done, "aria-label": "完成子任務", onchange: async e => {
+      checkbox({ checked: s.done, "aria-label": "完成子任務", onchange: async e => {
         await call("toggle_subtask", t.id, s.id, e.target.checked); await reload();
       } }),
       h("input", { value: s.title, "aria-label": "子任務標題", onchange: e => save(t.id, {
@@ -207,13 +252,13 @@ function renderDetail(t) {
       }) }),
       h("button", { title: "刪除子任務", onclick: async () => {
         await call("remove_subtask", t.id, s.id); await reload();
-      } }, "×")))),
+      } }, icon("trash"))))),
     subAdd,
     t.notes.length > 0 && h("ul", { class: "notes" },
-      t.notes.map((n) => h("li", {}, h("span", { class: "meta" }, `${fmtTime(n.at)} · ${n.author}`), n.text))),
+      t.notes.map((n) => h("li", {}, h("span", { class: "meta" }, `${fmtTime(n.at)} · ${n.author}`), n.text.replace(/^\u2705\s*/, "完成：")))),
     note,
     h("div", { class: "actions" },
-      !REMOTE && h("button", { onclick: () => copy(agentPrompt(t), "已複製，貼給 Claude Code／Codex 即可") }, "🤖 複製給 AI 的指令"),
+      !REMOTE && h("button", { onclick: () => copy(agentPrompt(t), "已複製，貼給 Claude Code／Codex 即可") }, icon("robot"), "複製給 AI 的指令"),
       h("button", { class: "danger", onclick: async () => {
         await call("delete_todo", t.id);
         await reload();
@@ -249,13 +294,15 @@ function render() {
   }
   const done = visible.filter((t) => t.status === "done");
   if (done.length) {
-    board.append(h("h2", { class: "toggle", onclick: () => { S.showDone = !S.showDone; render(); } },
-      `${S.showDone ? "▾" : "▸"} 已完成`, h("small", {}, done.length)));
+    board.append(h("h2", { class: "toggle", role: "button", tabindex: 0, "aria-expanded": S.showDone,
+      onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); S.showDone = !S.showDone; render(); } },
+      onclick: () => { S.showDone = !S.showDone; render(); } },
+      icon(S.showDone ? "chevron-down" : "chevron-right"), "已完成", h("small", {}, done.length)));
     if (S.showDone) board.append(...done.slice(0, 50).map(renderItem));
   }
   if (!visible.length) {
     board.append(h("p", { class: "empty" }, S.todos.length ? "沒有符合的待辦" : "還沒有待辦，從上面新增第一個吧",
-      !S.todos.length && !REMOTE && h("br"), !S.todos.length && !REMOTE && "按右上角 🤖 接上 Claude Code／Codex"));
+      !S.todos.length && !REMOTE && h("br"), !S.todos.length && !REMOTE && "按右上角的「接上 AI」按鈕"));
   }
   board.scrollTop = scroll;
 }
@@ -335,7 +382,8 @@ function bindMain() {
 
 // ---------- 接上 AI ----------
 function renderMobile(info) {
-  const enabled = h("input", { type: "checkbox", checked: info.enabled, "aria-label": "手機存取" });
+  const toggle = checkbox({ checked: info.enabled, "aria-label": "手機存取" });
+  const enabled = toggle.querySelector("input");
   const port = h("input", { type: "number", min: 1, max: 65535, value: info.port, "aria-label": "連接埠" });
   const configure = async (regenerate = false) => {
     try { renderMobile(await call("mobile_configure", enabled.checked, Number(port.value), regenerate)); }
@@ -344,7 +392,7 @@ function renderMobile(info) {
   enabled.onchange = () => configure();
   const body = $("#mobileBody");
   body.replaceChildren(
-    h("label", { class: "mobile-toggle" }, enabled, "開啟手機存取"),
+    h("label", { class: "mobile-toggle" }, toggle, "開啟手機存取"),
     h("div", { class: "row" }, h("label", {}, "連接埠", port), h("button", { onclick: () => configure() }, "套用")),
     h("button", { onclick: () => { if (confirm("重新產生 token 後，舊的手機都要重新掃描 QR code 配對。繼續？")) configure(true); } }, "重新產生 token"),
     info.error && h("p", { class: "danger" }, info.error));
@@ -376,7 +424,7 @@ async function openAiPanel() {
 }
 
 function renderAi(info) {
-  const check = (ok, text) => h("div", { class: ok ? "ok" : "" }, `${ok ? "✓" : "○"} ${text}`);
+  const check = (ok, text) => h("div", { class: ok ? "ok" : "" }, icon(ok ? "checkbox-on" : "checkbox"), text);
   const tool = (name, key, st, manual) => {
     const done = st.mcp && st.instructions;
     return h("section", { class: "tool" },
@@ -423,9 +471,9 @@ function renderMini() {
   $("#miniCount").textContent = open.length ? `${open.length} 件` : "";
   $("#miniList").replaceChildren(...open.map((t) =>
     h("div", { class: `mini-item ${t.status}${t.priority === "high" ? " high" : ""}` },
-      h("input", { type: "checkbox", title: "完成", onchange: () => save(t.id, { status: "done" }) }),
+      checkbox({ title: "完成", onchange: () => save(t.id, { status: "done" }) }),
       h("div", { class: "t", title: "在主視窗開啟", onclick: () => api.open_in_main(t.id) }, t.title))));
-  if (!open.length) $("#miniList").append(h("p", { class: "empty" }, "都做完了 🎉"));
+  if (!open.length) $("#miniList").append(h("p", { class: "empty" }, "都做完了"));
 }
 
 function bindMini() {
@@ -463,7 +511,7 @@ function inView(t, view) {
 }
 function switchView(view) {
   S.view = view;
-  localStorage.setItem("todoView", view);
+  try { localStorage.setItem("todoView", view); } catch { /* 無法儲存時仍可切換 */ }
   render();
 }
 window.focusNewTodo = focus => { window.focus(); if (focus) $("#newTitle").focus(); };
@@ -476,11 +524,11 @@ async function previewQuick() {
     try {
       const p = await call("parse_quick", raw);
       if (serial !== previewQuick.serial) return;
-      const labels = [p.due && `📅 ${p.due.slice(5).replace("-", "/")}`,
-        p.remindAt && `⏰ ${p.remindAt.slice(11)}`, p.repeat && `🔁 ${REPEAT_LABEL[p.repeat]}`,
+      const labels = [p.due && h("span", { class: "badge" }, icon("calendar"), p.due.slice(5).replace("-", "/")),
+        p.remindAt && h("span", { class: "badge" }, icon("alarm-clock"), p.remindAt.slice(11)), p.repeat && h("span", { class: "badge" }, icon("repeat"), REPEAT_LABEL[p.repeat]),
         ...(p.tags || []).map(x => `#${x}`), p.project && `+${p.project}`,
         p.assignee && `@${p.assignee}`, p.priority && `!${PRIORITY_LABEL[p.priority]}`].filter(Boolean);
-      $("#quickPreview").replaceChildren(...labels.map(x => h("span", { class: "badge" }, x)));
+      $("#quickPreview").replaceChildren(...labels.map(x => typeof x === "string" ? h("span", { class: "badge" }, x) : x));
     } catch { /* 錯誤由 call 顯示 */ }
   }, 150);
 }
@@ -540,9 +588,9 @@ function renderTrash(board, todos) {
 function renderCalendar(board, todos) {
   const move = offset => { S.month = new Date(S.month.getFullYear(), S.month.getMonth() + offset, 1); render(); };
   board.append(h("div", { class: "calendar-head" },
-    h("button", { title: "上個月", onclick: () => move(-1) }, "‹"),
+    h("button", { title: "上個月", onclick: () => move(-1) }, icon("chevron-left")),
     h("b", {}, `${S.month.getFullYear()} / ${S.month.getMonth() + 1}`),
-    h("button", { title: "下個月", onclick: () => move(1) }, "›"),
+    h("button", { title: "下個月", onclick: () => move(1) }, icon("chevron-right")),
     h("button", { onclick: () => { S.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1); S.day = today(); render(); } }, "今天")));
   const grid = h("div", { class: "calendar" });
   for (const name of ["日", "一", "二", "三", "四", "五", "六"]) grid.append(h("div", { class: "weekday" }, name));
@@ -557,7 +605,7 @@ function renderCalendar(board, todos) {
       "aria-label": `${date}，${items.length} 件`, onclick: () => { S.day = date; render(); } },
       h("span", {}, day), h("div", { class: "day-titles" }, items.slice(0, 3).map(t => h("div", { title: t.title }, t.title)),
         items.length > 3 && h("div", {}, `+${items.length - 3}`)),
-      items.length > 0 && h("div", { class: "day-dots", title: `${items.length} 件` }, `● ${items.length}`)));
+      items.length > 0 && h("div", { class: "day-dots", title: `${items.length} 件` }, icon("list-box"), String(items.length))));
   }
   board.append(grid, h("h2", {}, S.day), ...todos.filter(t => t.due === S.day).map(renderItem));
   const input = h("input", { placeholder: "新增這一天的待辦…", required: true });
@@ -578,6 +626,8 @@ function renderCalendar(board, todos) {
 async function init() {
   if (init.started) return;
   init.started = true;
+  bindTheme();
+  document.querySelectorAll("[data-icon]").forEach(el => { el.replaceChildren(icon(el.dataset.icon)); el.setAttribute("aria-label", el.title); });
   api = window.pywebview?.api || httpApi();
   MINI ? bindMini() : bindMain();
   await reload();

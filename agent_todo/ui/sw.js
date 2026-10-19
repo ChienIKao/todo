@@ -1,6 +1,6 @@
 "use strict";
-const CACHE = "agent-todo-ui-v1";
-const FILES = ["/", "/style.css", "/app.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "agent-todo-ui-v2";
+const FILES = ["/", "/style.css", "/fonts/Cubic_11.woff2", "/pixelarticons/sprite.svg", "/app.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
 });

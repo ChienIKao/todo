@@ -55,8 +55,8 @@ def _print_list(todos: list[dict]) -> None:
                             Path(t["project"]).name if t["project"] else "",
                             f"@{t['assignee']}" if t["assignee"] else "",
                             f"due {t['due']}" if t["due"] else "",
-                            "📝" if t["context"] else "",
-                            f"💬{len(t['notes'])}" if t["notes"] else "") if x]
+                            "背景" if t["context"] else "",
+                            f"筆記 {len(t['notes'])}" if t["notes"] else "") if x]
         print(f"{ICON[t['status']]} #{t['id']:<3} {t['title']}" + (f"  [{' · '.join(meta)}]" if meta else ""))
 
 
@@ -159,11 +159,11 @@ def main(argv: list[str] | None = None) -> int:
         elif a.cmd == "block":
             store.update(a.id, status="blocked")
             if a.text:
-                store.add_note(a.id, "⊘ " + " ".join(a.text), a.by)
+                store.add_note(a.id, "卡住：" + " ".join(a.text), a.by)
             print(f"#{a.id} → 卡住")
         elif a.cmd == "done":
             t = store.complete(a.id, " ".join(a.text), a.by)
-            print(f"#{a.id} → 完成 ✅")
+            print(f"#{a.id} → 完成")
             if t.get("nextId"):
                 next_todo = store.get(t["nextId"])
                 print(f"已建立下一次 #{next_todo['id']}（due {next_todo['due']}）")

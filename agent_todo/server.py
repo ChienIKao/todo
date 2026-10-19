@@ -55,6 +55,14 @@ def create_server(dev_api=None, port: int = 0, token=None):
             return host in ("127.0.0.1", "localhost") and (not origin or urlparse(origin).netloc == self.headers["Host"])
 
         def do_POST(self):
+            # 先把 body 讀完再回錯誤，不然 Windows 會直接重設連線（WinError 10053）
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                return self.send_error(400)
+            if not 0 <= length <= 2_000_000:
+                return self.send_error(413)
+            raw = self.rfile.read(length)
             if token is not None:
                 if not self._authorized():
                     return
@@ -68,10 +76,7 @@ def create_server(dev_api=None, port: int = 0, token=None):
                     or name.startswith("_") or not callable(getattr(dev_api, name, None))):
                 return self.send_error(404)
             try:
-                length = int(self.headers.get("Content-Length", 0))
-                if not 0 <= length <= 2_000_000:
-                    return self.send_error(413)
-                args = json.loads(self.rfile.read(length) or b"[]")
+                args = json.loads(raw or b"[]")
                 if not isinstance(args, list):
                     return self.send_error(400)
                 body = {"result": getattr(dev_api, name)(*args)}
@@ -110,6 +115,7 @@ def create_server(dev_api=None, port: int = 0, token=None):
             ctype = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
             if file.suffix == ".js":
                 ctype = "text/javascript"
+            ctype = {".woff2": "font/woff2", ".svg": "image/svg+xml"}.get(file.suffix, ctype)
             data = file.read_bytes()
             if file.name == "index.html":
                 mode = "remote" if token is not None else ("dev" if dev_api is not None else "desktop")

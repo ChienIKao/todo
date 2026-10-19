@@ -139,3 +139,16 @@ def test_pairing_svg(monkeypatch):
     assert info["pair_url"].startswith("https://pc.tail.ts.net/pair?token=")
     assert "<svg" in info["qr_svg"]
     assert "token" not in {key for key in info if key != "pair_url"}
+
+
+@pytest.mark.parametrize("path, mime", [
+    ("/fonts/Cubic_11.woff2", "font/woff2"),
+    ("/pixelarticons/sprite.svg", "image/svg+xml"),
+])
+def test_remote_pixel_assets(remote, path, mime):
+    request, _, _ = remote
+    assert request(path)[0] == 401
+    status, headers, body = request(path, headers={"Authorization": "Bearer test-secret"})
+    assert status == 200
+    assert headers["Content-Type"] == mime
+    assert body

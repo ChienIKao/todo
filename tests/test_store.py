@@ -24,6 +24,7 @@ class StoreTests(unittest.TestCase):
         done = store.complete(t["id"], "Added redirect URI", "claude-code")
         self.assertEqual(done["status"], "done")
         self.assertTrue(done["completedAt"])
+        self.assertEqual(done["notes"][-1]["text"], "完成：Added redirect URI")
         self.assertEqual([n["author"] for n in done["notes"]], ["claude-code", "claude-code"])
         self.assertEqual(store.list_todos(), [])
         self.assertEqual(len(store.list_todos(status="all")), 1)

@@ -91,3 +91,16 @@ def test_cli(capsys):
     assert store.get(2)["title"] == "明天 工作 !!"
     assert cli.main(["rm", "--purge", "2"]) == 0
     assert cli.main(["show", "2"]) == 1
+
+
+def test_cli_progress_text(capsys):
+    store.add("work", context="background")
+    assert cli.main(["block", "1", "等待回覆"]) == 0
+    assert store.get(1)["notes"][-1]["text"] == "卡住：等待回覆"
+    capsys.readouterr()
+    assert cli.main(["ls"]) == 0
+    output = capsys.readouterr().out
+    assert "背景" in output and "筆記 1" in output
+    assert cli.main(["done", "1", "已確認"]) == 0
+    assert capsys.readouterr().out.strip() == "#1 → 完成"
+    assert store.get(1)["notes"][-1]["text"] == "完成：已確認"

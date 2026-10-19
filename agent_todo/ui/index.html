@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2a2a2a">
+<meta name="theme-color" content="#0e0f14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agent Todo">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <title>Agent Todo</title>
+<link rel="preload" href="fonts/Cubic_11.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,7 +19,7 @@
   <header class="top">
     <form id="quickAdd" autocomplete="off">
       <input id="newTitle" placeholder="明天下午3點 交報告 #工作 !高" required>
-      <button type="button" id="moreBtn" class="icon" title="更多欄位">⋯</button>
+      <button type="button" id="moreBtn" class="icon" title="更多欄位" data-icon="more-horizontal"></button>
       <div id="quickPreview" class="badges"></div>
       <div id="more" class="hidden">
         <textarea id="newContext" rows="4" placeholder="背景／脈絡：AI 會讀這段，寫清楚就不用再重講（連結、要求、驗收條件…）"></textarea>
@@ -46,9 +47,10 @@
     <div class="bar">
       <select id="filterProject"><option value="">全部專案</option></select>
       <input id="filterQuery" placeholder="搜尋…">
-      <button id="miniBtn" class="icon" title="置頂小視窗">📌</button>
-      <button id="aiBtn" class="icon" title="接上 Claude Code／Codex">🤖</button>
-      <button id="mobileBtn" class="icon" title="手機存取">📱</button>
+      <button id="themeBtn" class="icon" title="切換主題"></button>
+      <button id="miniBtn" class="icon" title="置頂小視窗" data-icon="picture-in-picture"></button>
+      <button id="aiBtn" class="icon" title="接上 AI" data-icon="robot"></button>
+      <button id="mobileBtn" class="icon" title="手機存取" data-icon="smartphone"></button>
     </div>
     <nav id="tabs" aria-label="檢視"></nav>
   </header>
@@ -57,22 +59,22 @@
 
 <div id="aiPanel" class="overlay hidden">
   <div class="sheet">
-    <div class="sheet-head"><b>接上 AI</b><button id="aiClose" class="icon" title="關閉">✕</button></div>
+    <div class="sheet-head"><b>接上 AI</b><button id="aiClose" class="icon" title="關閉" data-icon="close"></button></div>
     <div id="aiBody"></div>
   </div>
 </div>
 
 <div id="mobilePanel" class="overlay hidden">
   <div class="sheet">
-    <div class="sheet-head"><b>手機存取</b><button id="mobileClose" class="icon" title="關閉">✕</button></div>
+    <div class="sheet-head"><b>手機存取</b><button id="mobileClose" class="icon" title="關閉" data-icon="close"></button></div>
     <div id="mobileBody"></div>
   </div>
 </div>
 <div id="mini" class="hidden">
   <div class="mini-head pywebview-drag-region">
     <b>待辦</b><span id="miniCount"></span>
-    <button id="miniExpand" class="icon" title="回主視窗">↗</button>
-    <button id="miniClose" class="icon" title="關閉小視窗">✕</button>
+    <button id="miniExpand" class="icon" title="回主視窗" data-icon="external-link"></button>
+    <button id="miniClose" class="icon" title="關閉小視窗" data-icon="close"></button>
   </div>
   <form id="miniAdd" autocomplete="off"><input id="miniTitle" placeholder="新增待辦…"></form>
   <div id="miniList"></div>
