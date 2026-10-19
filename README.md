@@ -1,110 +1,115 @@
-# agent-todo
+# Agent Todo
 
-一份待辦清單，三個入口：
+**讓 Claude Code 和 Codex 也看得到的待辦清單。** 每件事都附一段「背景」，寫一次就好；之後跟 AI 說「處理 #12」，它會自己讀背景、開始做、記進度、做完回報，不用再重複解釋。
 
-| 入口 | 給誰 | 做什麼 |
-|---|---|---|
-| `todo` CLI | 你 | 在終端機快速新增、查看、完成 |
-| 桌面看板 | 你 | 小視窗常駐桌面，隨時看到清單；AI 改了會即時更新 |
-| MCP server | Claude Code / Codex | 直接讀你的待辦和**背景說明**、記錄進度、標完成 |
+*A Windows desktop todo app (Python + pywebview) with a built-in MCP server, so Claude Code and Codex can read your todos — including the background for each — and update them as they work. UI in Traditional Chinese.*
 
-重點是每個待辦都有一個 **背景（context）** 欄位：把需求、連結、限制、驗收條件寫在這裡一次，之後只要跟 AI 說「做 #12」，它就會自己讀，不用再重複解釋。
+## 功能
 
-資料存在 `~/.agent-todo/todos.json`（可用 `AGENT_TODO_HOME` 改位置），每次變更同時產生一份 `~/.agent-todo/TODO.md` 快照。不需要任何外部服務，純 Node.js、零依賴。
+**桌面 App**
+- 快速新增：輸入標題按 Enter；按「⋯」可以填背景、專案、優先度、負責人、期限、標籤
+- 依狀態分組（進行中／待辦／卡住／已完成），可以依專案篩選或搜尋
+- 點標題展開：直接改背景、狀態、優先度，或加進度筆記
+- **📌 置頂小視窗**：縮成一個浮在最上層的小清單，隨時看得到，也能直接打勾或新增
+- 「🤖 複製給 AI 的指令」：複製一段請 AI 處理這個待辦的話，貼給 Claude Code／Codex 即可
+- AI 或 `todo` 指令改了清單，畫面會自動更新
+
+**接上 AI**
+- 右上角 🤖 →「一鍵設定」：自動幫 Claude Code／Codex 加上 MCP server 與全域指示（`~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md`）
+- AI 可以用的工具：`list_todos`、`get_todo`、`add_todo`、`update_todo`、`add_note`、`complete_todo`
+- AI 寫的筆記會標上是誰寫的（claude-code、codex…），你在 App 裡就看得到它做到哪
+- 沒接 MCP 的 AI 也可以直接讀 `~/.agent-todo/TODO.md`（自動產生的唯讀快照）
+
+**`todo` 指令**
+- 在終端機新增、查看、完成待辦；`--here` 會把目前的 git repo 當成專案
+
+資料存在 `~/.agent-todo/todos.json`（可以用環境變數 `AGENT_TODO_HOME` 改位置），全部在你的電腦上，不需要帳號或雲端服務。
 
 ## 安裝
 
-需要 Node.js 18 以上。
+到 [Releases](../../releases/latest) 下載 `AgentTodo-Setup-v*.exe`。安裝時可以勾選：
 
-```bash
-git clone https://github.com/ChienIKao/todo.git ~/tools/agent-todo
-cd ~/tools/agent-todo
-npm link          # 之後就能直接用 `todo` 指令
-todo setup        # 印出下面兩段設定，路徑已幫你填好
+- 建立桌面捷徑
+- 開機時自動啟動
+- 把 `todo` 指令加入 PATH
+
+裝好打開 App，按右上角 🤖 →「一鍵設定」，重新開啟 Claude Code／Codex 就生效。
+
+### 從原始碼執行
+
+需要 Python 3.10 以上。雙擊 `啟動待辦.bat`（第一次會自動建立 `.venv` 並安裝套件），或：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python main.py
 ```
 
-## 接上 Claude Code
+`todo` 指令用 `python todo.py …` 執行。開發介面時可以用 `python main.py --dev`，在一般瀏覽器開 `http://127.0.0.1:8766/?dev`。
 
-```bash
-claude mcp add --scope user todo -- node ~/tools/agent-todo/bin/todo.js mcp
+## 怎麼跟 AI 說
+
+在任何 repo 裡開 Claude Code 或 Codex：
+
+- 「看一下我的待辦，做優先度最高的那個」
+- 「處理 #3」
+- 「這個 repo 有什麼待辦？」
+- 「把剛剛討論的後續工作加到我的待辦，背景寫清楚」
+
+AI 會：`list_todos` → `get_todo` 讀背景 → 設成進行中 → 邊做邊 `add_note` → `complete_todo` 附上摘要。
+
+### 手動設定
+
+不想用一鍵設定的話（`todo setup` 會印出含正確路徑的版本）：
+
+```powershell
+# Claude Code
+claude mcp add --scope user todo -- "C:\Users\你\AppData\Local\Programs\AgentTodo\todo.exe" mcp
 ```
-
-## 接上 Codex
-
-在 `~/.codex/config.toml` 加：
 
 ```toml
+# Codex：~/.codex/config.toml
 [mcp_servers.todo]
-command = "node"
-args = ["/Users/你/tools/agent-todo/bin/todo.js", "mcp"]
+command = "C:\\Users\\你\\AppData\\Local\\Programs\\AgentTodo\\todo.exe"
+args = ["mcp"]
 ```
 
-## 讓 AI 預設會去看待辦（建議）
+## `todo` 指令
 
-把 [`docs/agent-instructions.md`](docs/agent-instructions.md) 的內容貼進：
-
-- `~/.claude/CLAUDE.md`（Claude Code 全域指示）
-- `~/.codex/AGENTS.md`（Codex 全域指示）
-
-之後在任何 repo 裡說「看一下我的待辦，做優先度最高的那個」或「處理 #3」就行。
-AI 會：`list_todos` → `get_todo` 讀背景 → 設成進行中 → 邊做邊 `add_note` → `complete_todo` 附上摘要。
-你在看板上就能看到它做到哪、留了什麼筆記。
-
-MCP 提供的工具：
-
-| 工具 | 用途 |
-|---|---|
-| `list_todos` | 列出待辦（可依 status / project / tag / assignee / 關鍵字篩選） |
-| `get_todo` | 讀單一待辦的完整背景與筆記 |
-| `add_todo` | 新增待辦 |
-| `update_todo` | 改狀態、優先度、背景等 |
-| `add_note` | 追加進度筆記（會記錄是哪個 agent 寫的） |
-| `complete_todo` | 標記完成並附摘要 |
-
-## 桌面看板
-
-```bash
-todo serve --open     # http://localhost:4567
-```
-
-在 Chrome / Edge 打開後，網址列右側點「安裝」（或選單 → 投放、儲存和分享 → 安裝為應用程式），就會變成一個獨立的桌面小視窗，可以釘在 Dock / 工作列。
-
-- 點標題展開，可以直接改背景、狀態、優先度，或加筆記
-- 「🤖 複製給 AI 的指令」會複製一段叫 AI 處理這個待辦的話，貼給 Claude Code / Codex 即可
-- AI 或 CLI 改了清單，看板會即時更新
-
-想開機自動啟動看板：
-
-- **macOS**：在「系統設定 → 一般 → 登入項目」加一個執行 `todo serve` 的腳本，或用 LaunchAgent
-- **Windows**：在 `shell:startup` 資料夾放一個捷徑，目標為 `node C:\…\bin\todo.js serve`
-- **Linux**：用 systemd user service 或桌面環境的自動啟動
-
-看板只監聽 `127.0.0.1`，並會擋掉其他網站的跨站請求。
-
-## CLI
-
-```bash
-todo add "修登入頁 OAuth 500" --here --high --assign claude \
+```powershell
+todo add 修登入頁 OAuth 500 --here --high --assign claude `
   -c "Google 登入後 callback 回 500，log 是 redirect_uri mismatch。驗收：本機與 staging 都能登入。"
-todo add "整理 Q4 報告" -p 工作 --due 2026-10-25
-pbpaste | todo add "照這份規格實作" -c -     # 背景從 stdin 讀
+todo add 整理 Q4 報告 -p 工作 --due 2026-10-25
+Get-Clipboard | todo add 照這份規格實作 -c -     # 背景從 stdin 讀
 
 todo                  # 列出未完成
 todo ls --here        # 只看目前 repo 的
 todo ls -a -q 登入    # 含已完成，搜尋
 todo show 1           # 看完整背景與筆記
 todo start 1
-todo note 1 "原因是 GCP 少設 staging 網址"
-todo block 2 "等 PM 回覆"
-todo done 1 "補上 redirect URI，兩邊都測過"
+todo note 1 原因是 GCP 少設 staging 網址
+todo block 2 等 PM 回覆
+todo done 1 補上 redirect URI，兩邊都測過
 todo edit 2 --high --assign codex
 todo rm 3
+todo setup            # 顯示接上 Claude Code／Codex 的設定
 ```
-
-`--here` 會把目前所在的 git repo 路徑當作專案，AI 在同一個 repo 裡就能用 project 篩出相關待辦。
 
 ## 開發
 
-```bash
-npm test
+```powershell
+python -m unittest        # 測試
+.\build.ps1               # 打包：dist\AgentTodo-v<版本>-win64.zip，有 Inno Setup 6 會再產生安裝程式
 ```
+
+推送 `v*` 標籤（版本要跟 `agent_todo/__init__.py` 一致）會由 GitHub Actions 自動打包並建立 Release。
+
+| 檔案 | 用途 |
+|---|---|
+| `main.py` | 桌面 App 進入點（pywebview 視窗） |
+| `todo.py` | `todo` 指令與 MCP server 進入點 |
+| `agent_todo/store.py` | 待辦資料的讀寫（多個程序同時寫入時用 lock 檔互斥） |
+| `agent_todo/mcp.py` | MCP server（stdio JSON-RPC） |
+| `agent_todo/api.py` | 介面呼叫的 API（pywebview js_api） |
+| `agent_todo/integrations.py` | 一鍵設定 Claude Code／Codex |
+| `agent_todo/ui/` | 介面（HTML／CSS／JavaScript） |

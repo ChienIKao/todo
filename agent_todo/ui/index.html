@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Todo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <form id="quickAdd" autocomplete="off">
+      <input id="newTitle" placeholder="新增待辦…（Enter 送出）" required>
+      <button type="button" id="moreBtn" class="icon" title="更多欄位">⋯</button>
+      <div id="more" class="hidden">
+        <textarea id="newContext" rows="4" placeholder="背景／脈絡：AI 會讀這段，寫清楚就不用再重講（連結、要求、驗收條件…）"></textarea>
+        <div class="row">
+          <input id="newProject" placeholder="專案（名稱或 repo 路徑）" list="projects">
+          <select id="newPriority">
+            <option value="normal">普通</option>
+            <option value="high">高</option>
+            <option value="low">低</option>
+          </select>
+        </div>
+        <div class="row">
+          <input id="newAssignee" placeholder="負責（me／claude／codex）" list="assignees">
+          <input id="newDue" type="date">
+        </div>
+        <input id="newTags" placeholder="標籤，用逗號分隔">
+        <button type="submit" class="primary">新增</button>
+      </div>
+    </form>
+    <div class="bar">
+      <select id="filterProject"><option value="">全部專案</option></select>
+      <input id="filterQuery" placeholder="搜尋…">
+      <button id="miniBtn" class="icon" title="置頂小視窗">📌</button>
+      <button id="aiBtn" class="icon" title="接上 Claude Code／Codex">🤖</button>
+    </div>
+  </header>
+  <main id="board"></main>
+</div>
+
+<div id="aiPanel" class="overlay hidden">
+  <div class="sheet">
+    <div class="sheet-head"><b>接上 AI</b><button id="aiClose" class="icon" title="關閉">✕</button></div>
+    <div id="aiBody"></div>
+  </div>
+</div>
+
+<div id="mini" class="hidden">
+  <div class="mini-head pywebview-drag-region">
+    <b>待辦</b><span id="miniCount"></span>
+    <button id="miniExpand" class="icon" title="回主視窗">↗</button>
+    <button id="miniClose" class="icon" title="關閉小視窗">✕</button>
+  </div>
+  <form id="miniAdd" autocomplete="off"><input id="miniTitle" placeholder="新增待辦…"></form>
+  <div id="miniList"></div>
+</div>
+
+<datalist id="projects"></datalist>
+<datalist id="assignees"><option value="me"><option value="claude"><option value="codex"></datalist>
+<div id="toast" class="hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
