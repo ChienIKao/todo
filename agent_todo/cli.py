@@ -137,7 +137,8 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="replace")
+            # 輸出被 AI 或其他程式讀取（不是主控台）時用 UTF-8，不然 Windows 預設的 cp950 會變亂碼
+            stream.reconfigure(errors="replace", **({} if stream.isatty() else {"encoding": "utf-8"}))
     a = _parser().parse_args(argv)
     try:
         if a.cmd in (None, "ls"):

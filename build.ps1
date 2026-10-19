@@ -30,7 +30,7 @@ if ($LASTEXITCODE) { throw "PyInstaller（App）失敗" }
 if ($LASTEXITCODE) { throw "PyInstaller（todo 指令）失敗" }
 Copy-Item build\cli\todo.exe dist\AgentTodo\
 
-Copy-Item README.md dist\AgentTodo\
+Copy-Item README.md, LICENSE dist\AgentTodo\
 $zip = "dist\AgentTodo-v$version-win64.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path dist\AgentTodo -DestinationPath $zip
