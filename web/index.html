@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Todo</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<meta name="theme-color" content="#4f46e5">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <form id="quick-add" autocomplete="off">
+    <input id="new-title" placeholder="新增待辦…（Enter 送出）" required>
+    <button type="button" id="toggle-more" title="更多欄位">⋯</button>
+    <div id="more" hidden>
+      <textarea id="new-context" rows="4" placeholder="背景 / 脈絡：AI 會讀這段，寫清楚就不用再重講（連結、要求、驗收條件…）"></textarea>
+      <div class="row">
+        <input id="new-project" placeholder="專案（名稱或 repo 路徑）" list="projects">
+        <select id="new-priority">
+          <option value="normal">普通</option>
+          <option value="high">高</option>
+          <option value="low">低</option>
+        </select>
+      </div>
+      <div class="row">
+        <input id="new-assignee" placeholder="負責（me / claude / codex）" list="assignees">
+        <input id="new-due" type="date">
+      </div>
+      <input id="new-tags" placeholder="標籤，用逗號分隔">
+      <button type="submit" class="primary">新增</button>
+    </div>
+  </form>
+  <div class="filters">
+    <select id="filter-project"><option value="">全部專案</option></select>
+    <input id="filter-query" placeholder="搜尋…">
+  </div>
+</header>
+<main id="board"></main>
+<datalist id="projects"></datalist>
+<datalist id="assignees"><option value="me"><option value="claude"><option value="codex"></datalist>
+<div id="toast" hidden></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
