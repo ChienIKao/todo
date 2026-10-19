@@ -110,6 +110,7 @@ def create_server(dev_api=None, port: int = 0, token=None):
             ctype = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
             if file.suffix == ".js":
                 ctype = "text/javascript"
+            ctype = {".woff2": "font/woff2", ".svg": "image/svg+xml"}.get(file.suffix, ctype)
             data = file.read_bytes()
             if file.name == "index.html":
                 mode = "remote" if token is not None else ("dev" if dev_api is not None else "desktop")

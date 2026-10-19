@@ -114,7 +114,7 @@ class Api:
         x = (work.width - 360) if work else None
         self._mini = webview.create_window("Agent Todo・小視窗", f"{self._url}?mini=1", js_api=self, width=320,
                                            height=480, x=x, y=60 if work else None, min_size=(260, 200),
-                                           frameless=True, easy_drag=False, on_top=True, background_color="#232323")
+                                           frameless=True, easy_drag=False, on_top=True, background_color="#0e0f14")
         self._mini.events.closed += self._mini_closed
         if self._window:
             self._window.minimize()

@@ -293,7 +293,7 @@ def complete(tid, summary: str = "", author: str = "me") -> dict:
         todo = _find(db, tid)
         was_done = todo["status"] == "done"
         if (summary or "").strip():
-            todo["notes"].append({"at": _now(), "author": author, "text": f"✅ {summary.strip()}"})
+            todo["notes"].append({"at": _now(), "author": author, "text": f"完成：{summary.strip()}"})
         _remember_status(todo)
         todo["status"] = "done"
         todo["completedAt"] = todo["completedAt"] or _now()
