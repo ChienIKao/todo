@@ -15,6 +15,9 @@ $version = (& $python -c "import agent_todo; print(agent_todo.__version__)").Tri
     --noconfirm --clean --windowed --onedir `
     --icon assets\icon.ico `
     --add-data "agent_todo\ui;agent_todo\ui" `
+    --add-data "assets\icon.png;assets" `
+    --hidden-import pystray._win32 `
+    --hidden-import PIL.PngImagePlugin `
     --collect-all webview
 if ($LASTEXITCODE) { throw "PyInstaller（App）失敗" }
 

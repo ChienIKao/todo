@@ -5,9 +5,10 @@ import os
 import subprocess
 import sys
 
-from . import __version__, integrations, store
+from . import __version__, integrations, store, quickadd
 
-_ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "due", "status")
+_ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "due", "status",
+               "subtasks", "repeat", "remindAt", "order")
 
 
 class Api:
@@ -15,6 +16,16 @@ class Api:
         self._window = None
         self._mini = None
         self._url = ""
+        self._mobile = None
+
+    def mobile_info(self) -> dict:
+        return self._mobile.info()
+
+    def mobile_configure(self, enabled: bool, port: int = 8767, regenerate: bool = False) -> dict:
+        return self._mobile.configure(enabled, port, regenerate)
+
+    def mobile_setup(self) -> dict:
+        return self._mobile.setup()
 
     def _attach(self, window, url: str = "") -> None:
         self._window = window
@@ -25,8 +36,8 @@ class Api:
         """資料檔的修改時間：AI 或 todo 指令改了清單，介面輪詢到就重新載入"""
         return store.version()
 
-    def list_todos(self) -> list[dict]:
-        return store.list_todos(status="all")
+    def list_todos(self, view: str = "") -> list[dict]:
+        return store.list_todos(status="all", view=view)
 
     def add_todo(self, fields: dict) -> dict:
         return store.add(**{k: v for k, v in fields.items() if k in _ADD_FIELDS and v not in (None, "")})
@@ -39,6 +50,36 @@ class Api:
 
     def delete_todo(self, tid: int) -> dict:
         return store.remove(tid)
+
+    def add_subtask(self, tid: int, title: str) -> dict:
+        return store.add_subtask(tid, title)
+
+    def toggle_subtask(self, tid: int, sid: int, done=None) -> dict:
+        return store.toggle_subtask(tid, sid, done)
+
+    def remove_subtask(self, tid: int, sid: int) -> dict:
+        return store.remove_subtask(tid, sid)
+
+    def reorder(self, ids: list[int]) -> list[dict]:
+        return store.reorder(ids)
+
+    def restore_todo(self, tid: int) -> dict:
+        return store.restore(tid)
+
+    def list_trash(self) -> list[dict]:
+        return store.list_trash()
+
+    def purge_todo(self, tid: int) -> dict:
+        return store.purge(tid)
+
+    def parse_quick(self, text: str) -> dict:
+        return quickadd.parse(text)
+
+    def due_reminders(self) -> list[dict]:
+        return store.due_reminders()
+
+    def mark_reminded(self, tid: int) -> dict:
+        return store.mark_reminded(tid)
 
     # ---- 接上 AI ----
     def info(self) -> dict:
@@ -81,6 +122,7 @@ class Api:
     def _mini_closed(self) -> None:
         self._mini = None
         if self._window:
+            self._window.show()
             self._window.restore()
 
     def close_mini(self) -> None:
@@ -88,6 +130,7 @@ class Api:
         if mini:
             mini.destroy()
             if self._window:
+                self._window.show()
                 self._window.restore()
 
     def open_in_main(self, tid: int) -> None:

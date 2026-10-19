@@ -1,1 +1,4 @@
 pywebview==6.2.1
+pystray==0.19.5
+Pillow==12.0.0
+segno==1.6.6

@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
-from . import __version__, integrations, store
+from . import __version__, integrations, store, quickadd
 
 ICON = {"todo": "○", "doing": "◐", "blocked": "⊘", "done": "●"}
 
@@ -39,6 +40,10 @@ def _fields(a) -> dict:
         f["due"] = a.due
     if a.tags is not None:
         f["tags"] = a.tags
+    if a.repeat is not None:
+        f["repeat"] = a.repeat
+    if a.remind_at is not None:
+        f["remindAt"] = a.remind_at
     return f
 
 
@@ -87,6 +92,8 @@ def _parser() -> argparse.ArgumentParser:
         g.add_argument("--normal", dest="priority", action="store_const", const="normal", help="普通優先")
         sp.add_argument("--assign", help="負責：me / claude / codex …")
         sp.add_argument("--due", help="期限 YYYY-MM-DD")
+        sp.add_argument("--repeat", choices=store.REPEATS, help="重複規則")
+        sp.add_argument("--remind-at", help="提醒時間 YYYY-MM-DDTHH:MM")
         sp.add_argument("-t", "--tags", help="標籤，用逗號分隔")
 
     ls = sub.add_parser("ls", help="列出待辦（預設）")
@@ -94,18 +101,28 @@ def _parser() -> argparse.ArgumentParser:
     ls.add_argument("-p", "--project")
     ls.add_argument("--here", action="store_true", help="只看目前 repo")
     ls.add_argument("-q", "--query", help="搜尋")
+    views = ls.add_mutually_exclusive_group()
+    views.add_argument("--today", dest="view", action="store_const", const="today")
+    views.add_argument("--upcoming", dest="view", action="store_const", const="upcoming")
 
     add = sub.add_parser("add", help="新增待辦")
     add.add_argument("words", nargs="+", metavar="標題")
+    add.add_argument("--raw", action="store_true", help="不解析標題中的欄位")
     fields(add, title_flag=False)
     add.set_defaults(title=None, status=None)
 
-    for name, text in (("show", "顯示完整內容"), ("start", "標記進行中"), ("rm", "刪除")):
+    for name, text in (("show", "顯示完整內容"), ("start", "標記進行中"), ("restore", "從回收桶還原")):
         sub.add_parser(name, help=text).add_argument("id", type=int)
+    rm = sub.add_parser("rm", help="移到回收桶")
+    rm.add_argument("id", type=int)
+    rm.add_argument("--purge", action="store_true", help="永久刪除")
+    sub.add_parser("trash", help="列出回收桶")
     for name, text, arg in (("done", "標記完成", "摘要"), ("block", "標記卡住", "原因"), ("note", "新增筆記", "文字")):
         sp = sub.add_parser(name, help=text)
         sp.add_argument("id", type=int)
         sp.add_argument("text", nargs="*", metavar=arg)
+        sp.add_argument("--by", default=os.environ.get("AGENT_TODO_AUTHOR") or "me",
+                        help="記錄是誰寫的（例如 claude-code、codex），預設 me")
 
     edit = sub.add_parser("edit", help="修改欄位")
     edit.add_argument("id", type=int)
@@ -126,9 +143,12 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd in (None, "ls"):
             _print_list(store.list_todos(status="all" if getattr(a, "all", False) else "open",
                                          project=repo_root() if getattr(a, "here", False) else (getattr(a, "project", None) or ""),
-                                         query=getattr(a, "query", None) or ""))
+                                         query=getattr(a, "query", None) or "", prefer=repo_root(),
+                                         view=getattr(a, "view", None) or ""))
         elif a.cmd == "add":
-            t = store.add(**{**_fields(a), "title": " ".join(a.words)})
+            title = " ".join(a.words)
+            parsed = {"title": title} if a.raw else quickadd.parse(title)
+            t = store.add(**{**parsed, **_fields(a)})
             print(f"已新增 #{t['id']} {t['title']}")
         elif a.cmd == "show":
             print(store.format_todo(store.get(a.id)))
@@ -138,19 +158,27 @@ def main(argv: list[str] | None = None) -> int:
         elif a.cmd == "block":
             store.update(a.id, status="blocked")
             if a.text:
-                store.add_note(a.id, "⊘ " + " ".join(a.text))
+                store.add_note(a.id, "⊘ " + " ".join(a.text), a.by)
             print(f"#{a.id} → 卡住")
         elif a.cmd == "done":
-            store.complete(a.id, " ".join(a.text))
+            t = store.complete(a.id, " ".join(a.text), a.by)
             print(f"#{a.id} → 完成 ✅")
+            if t.get("nextId"):
+                next_todo = store.get(t["nextId"])
+                print(f"已建立下一次 #{next_todo['id']}（due {next_todo['due']}）")
         elif a.cmd == "note":
-            store.add_note(a.id, " ".join(a.text))
+            store.add_note(a.id, " ".join(a.text), a.by)
             print(f"#{a.id} 已新增筆記")
         elif a.cmd == "edit":
             print(store.format_todo(store.update(a.id, **_fields(a))))
         elif a.cmd == "rm":
-            store.remove(a.id)
-            print(f"已刪除 #{a.id}")
+            (store.purge if a.purge else store.remove)(a.id)
+            print(f"{'已永久刪除' if a.purge else '已移到回收桶'} #{a.id}")
+        elif a.cmd == "trash":
+            _print_list(store.list_trash())
+        elif a.cmd == "restore":
+            store.restore(a.id)
+            print(f"已還原 #{a.id}")
         elif a.cmd == "mcp":
             from . import mcp
             mcp.run()

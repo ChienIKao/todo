@@ -8,21 +8,31 @@ from . import __version__, store
 
 INSTRUCTIONS = """This is the user's personal todo list. Each todo carries a "context" field with the
 background the user would otherwise have to re-explain - always read it (get_todo) before working on a task.
-- When asked to "do the next task", "看我的待辦", or similar: call list_todos (filter by project if you are inside a repo), pick one, then get_todo.
+- When asked to "do the next task", "看我的待辦", or similar: call list_todos with current_repo set to your working directory
+  (todos for that repo come first, the rest are still listed), pick one, then get_todo. Only filter with project when the user asks for this repo's todos.
 - When you start a task, set status to "doing". Record meaningful progress, decisions and blockers with add_note.
+- For large tasks, break the work into subtasks first and check off each step with check_subtask as you finish it.
 - When finished, call complete_todo with a short summary of what you did (files, PRs, follow-ups).
 - If you discover new work, add it with add_todo including enough context for someone else to pick it up."""
 
 _ID = {"type": "integer", "description": "Todo id"}
 _FILTERS = {
+    "view": {"type": "string", "enum": ["today", "upcoming"]},
     "status": {"type": "string", "enum": ["open", "all", *store.STATUSES],
                "description": 'Default "open" (everything not done)'},
-    "project": {"type": "string", "description": "Project name or path; matches by substring"},
+    "project": {"type": "string", "description": "Only todos of this project (name or path). Use only when the user asks for one project"},
+    "current_repo": {"type": "string", "description": "Your working directory; its todos are listed first, others still shown"},
     "tag": {"type": "string"},
     "assignee": {"type": "string", "description": 'e.g. "me", "claude", "codex"'},
     "query": {"type": "string", "description": "Full-text search across title, context, notes"},
 }
 _FIELDS = {
+    "repeat": {"type": "string", "enum": list(store.REPEATS)},
+    "remind_at": {"type": "string", "description": "Local time YYYY-MM-DDTHH:MM, or empty"},
+    "subtasks": {"type": "array", "items": {"anyOf": [
+        {"type": "string"}, {"type": "object", "properties": {
+            "id": {"type": "integer"}, "title": {"type": "string"}, "done": {"type": "boolean"}},
+            "required": ["title"]}]}},
     "title": {"type": "string"},
     "context": {"type": "string", "description": "Background, links, acceptance criteria (markdown)"},
     "priority": {"type": "string", "enum": list(store.PRIORITIES)},
@@ -34,20 +44,34 @@ _FIELDS = {
 
 
 def _list(a, author):
-    todos = store.list_todos(**{k: a[k] for k in _FILTERS if a.get(k)})
+    here = a.get("current_repo") or ""
+    todos = store.list_todos(**{k: a[k] for k in _FILTERS if a.get(k) and k != "current_repo"}, prefer=here)
     if not todos:
         return "No matching todos."
-    return "\n".join(store.format_todo(t, full=False) + ("  (has context)" if t["context"] else "") for t in todos)
+    return "\n".join(store.format_todo(t, full=False) + ("  (has context)" if t["context"] else "")
+                     + ("  (this repo)" if here and store.project_matches(t["project"], here) else "") for t in todos)
 
 
 def _update(a, author):
     tid = a.pop("id")
-    return "Updated:\n" + store.format_todo(store.update(tid, **a))
+    return "Updated:\n" + _result(store.update(tid, **_fields(a)))
+
+
+def _fields(a):
+    return {"remindAt" if k == "remind_at" else k: v for k, v in a.items()}
+
+
+def _result(todo):
+    text = store.format_todo(todo)
+    if todo.get("nextId"):
+        next_todo = store.get(todo["nextId"])
+        text += f"\n已建立下一次 #{next_todo['id']}（due {next_todo['due']}）"
+    return text
 
 
 TOOLS = [
     ("list_todos", "List the user's todos (titles + metadata, no full context). "
-                   "Sorted: doing first, then by priority and due date.",
+                   "Sorted by status, priority, manual order, due date and id.",
      {"type": "object", "properties": _FILTERS}, _list),
     ("get_todo", "Get one todo with its full background context and progress notes. "
                  "Read this before working on a task.",
@@ -55,7 +79,7 @@ TOOLS = [
      lambda a, _: store.format_todo(store.get(a["id"]))),
     ("add_todo", 'Create a new todo. Put all background needed to do it in "context".',
      {"type": "object", "properties": _FIELDS, "required": ["title"]},
-     lambda a, _: "Created:\n" + store.format_todo(store.add(**{k: v for k, v in a.items() if k in _FIELDS}))),
+     lambda a, _: "Created:\n" + store.format_todo(store.add(**_fields({k: v for k, v in a.items() if k in _FIELDS})))),
     ("update_todo", 'Change fields of a todo (e.g. status "doing"/"blocked", priority, context). '
                     "Omitted fields stay unchanged.",
      {"type": "object", "properties": {"id": _ID, **_FIELDS, "status": {"type": "string", "enum": list(store.STATUSES)}},
@@ -65,7 +89,11 @@ TOOLS = [
      lambda a, author: "Noted:\n" + store.format_todo(store.add_note(a["id"], a["text"], author))),
     ("complete_todo", "Mark a todo done, with a short summary of what was done.",
      {"type": "object", "properties": {"id": _ID, "summary": {"type": "string"}}, "required": ["id"]},
-     lambda a, author: "Completed:\n" + store.format_todo(store.complete(a["id"], a.get("summary", ""), author))),
+     lambda a, author: "Completed:\n" + _result(store.complete(a["id"], a.get("summary", ""), author))),
+    ("check_subtask", "Check off a completed step of a todo.",
+     {"type": "object", "properties": {"id": _ID, "subtask_id": {"type": "integer"},
+      "done": {"type": "boolean", "default": True}}, "required": ["id", "subtask_id"]},
+     lambda a, _: store.format_todo(store.toggle_subtask(a["id"], a["subtask_id"], a.get("done", True)))),
 ]
 
 

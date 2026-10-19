@@ -15,19 +15,20 @@
   color-scheme: dark;
   --font: "Segoe UI", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
 }
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #fbfaf8; --side: #f1efeb; --panel: #ffffff; --panel-2: #e7e4de; --line: #e2dfd9;
-    --text: #1f1e1c; --text-2: #5f5c57; --text-3: #94908a;
-    color-scheme: light;
-    --accent: #2d6a5d; --accent-ink: #ffffff; --signal: #b97f06; --doing: #3e5fc4;
-  }
-}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
 body { -webkit-font-smoothing: antialiased; }
 .hidden { display: none !important; }
+.detail-close { display: none; }
+#offlineBanner { position: relative; z-index: 6; padding: 12px; background: #805d12; color: #fff; font-weight: 600; }
+:disabled { opacity: .5; cursor: default; }
+.overlay { z-index: 5; }
+#mobileBody { display: flex; flex-direction: column; gap: 12px; }
+.mobile-toggle { display: flex; gap: 10px; align-items: center; }
+.pair-qr { background: white; padding: 12px; align-self: center; max-width: 100%; }
+.pair-qr svg { display: block; width: 100%; max-width: 280px; height: auto; }
+a { color: var(--accent); }
 
 input, textarea, select, button {
   font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
@@ -114,3 +115,66 @@ body.mini-mode { background: var(--side); overflow: hidden; }
 .mini-item.high .t { font-weight: 600; }
 
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; max-width: 90%; z-index: 10; }
+
+/* ---------- 檢視 ---------- */
+#tabs { display: flex; gap: 3px; margin-top: 10px; }
+#tabs button { flex: 1; padding: 6px 2px; font-size: 12px; white-space: nowrap; background: transparent; border-color: transparent; }
+#tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+#tabs small { margin-left: 3px; color: var(--text-3); }
+#quickPreview { flex-basis: 100%; margin: 0; }
+#quickPreview:empty { display: none; }
+.badge.due-today { color: var(--signal); border-color: var(--signal); }
+.subtask { display: flex; gap: 6px; margin-bottom: 5px; align-items: center; }
+.subtask input[type=checkbox] { width: 16px; flex: none; accent-color: var(--accent); }
+.subtask input:not([type=checkbox]) { flex: 1; }
+.item.dragging { opacity: .4; }
+.calendar-head { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.calendar-head b, .calendar-head h2 { flex: 1; }
+.calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.weekday { text-align: center; color: var(--text-2); padding: 4px; }
+.calendar-day { text-align: left; min-height: 100px; padding: 5px; overflow: hidden; }
+.calendar-day.selected { border-color: var(--accent); background: var(--panel-2); }
+.calendar-day.current > span { color: var(--signal); }
+.day-titles { font-size: 11px; margin-top: 6px; }
+.day-titles div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+.day-dots { display: none; color: var(--accent); font-size: 10px; margin-top: 6px; }
+.day-add { display: flex; gap: 6px; margin-top: 12px; }
+.day-add input { flex: 1; }
+.trash-item { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+.trash-item .actions { justify-content: flex-end; }
+#toast button { margin-left: 10px; padding: 3px 8px; }
+.top { max-height: 70vh; overflow-y: auto; }
+@media (max-width: 560px) {
+  .calendar-day { min-height: 54px; }
+  .day-titles { display: none; }
+  .day-dots { display: block; }
+  .actions { flex-wrap: wrap; }
+}
+
+/* ---------- 手機 ---------- */
+@media (max-width: 599px) {
+  html, body, input, textarea, select, button { font-size: 16px; }
+  button, input, select, .title { min-height: 44px; }
+  .id, .badge, .hint, .notes .meta, .detail label > span, h2, #tabs button, #tabs small,
+  .day-titles, .day-dots, .weekday, .sheet-head, pre.cmd { font-size: 16px; }
+  #app { height: 100dvh; }
+  .top { padding-top: max(10px, env(safe-area-inset-top)); flex-shrink: 0; max-height: none; overflow: visible; }
+  #quickAdd { position: fixed; z-index: 3; bottom: 0; left: 0; right: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--side); border-top: 1px solid var(--line); max-height: 65dvh; overflow-y: auto; }
+  #quickPreview { max-height: 54px; overflow: auto; }
+  #board { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+  .bar { flex-wrap: wrap; }
+  .bar input { min-width: 100px; }
+  #tabs { overflow-x: auto; }
+  #tabs button { flex: 0 0 auto; padding: 8px 12px; }
+  .line { align-items: center; }
+  .line input[type=checkbox], .subtask input[type=checkbox] { width: 44px; height: 44px; margin: 0; }
+  .detail { position: fixed; inset: 0; z-index: 4; background: var(--bg); overflow-y: auto; padding: max(12px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+  .detail-close { display: block; flex-shrink: 0; }
+  body.offline .detail { padding-top: calc(100px + env(safe-area-inset-top)); }
+  h2.toggle { min-height: 44px; display: flex; align-items: center; }
+  .detail .row { flex-wrap: wrap; }
+  .detail .row > label { flex-basis: 45%; }
+  .overlay { padding: 0; }
+  .sheet { border-radius: 0; min-height: 100%; padding-top: max(16px, env(safe-area-inset-top)); }
+  #toast { bottom: calc(100px + env(safe-area-inset-bottom)); }
+}
