@@ -47,6 +47,23 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(titles("/home/me/code/web/src"), ["b"])
         self.assertEqual(titles("api"), ["c"])
 
+    def test_prefer_lists_project_first_without_hiding_others(self):
+        store.add("general", priority="high")
+        store.add("other", project="api")
+        store.add("mine", project="web")
+        titles = [t["title"] for t in store.list_todos(prefer="/home/me/code/web")]
+        self.assertEqual(titles, ["mine", "general", "other"])
+
+    def test_reopen_restores_status_before_done(self):
+        t = store.add("x")
+        store.update(t["id"], status="blocked")
+        store.update(t["id"], status="done")
+        self.assertEqual(store.get(t["id"])["reopenStatus"], "blocked")
+        store.update(t["id"], status="doing")
+        store.complete(t["id"])
+        store.complete(t["id"])  # 重複完成不會蓋掉
+        self.assertEqual(store.get(t["id"])["reopenStatus"], "doing")
+
     def test_search_and_tags(self):
         store.add("x", context="needs the staging url", tags="ops, 上線")
         store.add("y")

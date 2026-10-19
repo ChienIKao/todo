@@ -36,6 +36,16 @@ def _single_instance() -> bool:
         return True
 
     user32 = ctypes.windll.user32
+    from agent_todo.desktop import ACTIVATE_EVENT
+    kernel32.OpenEventW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel32.OpenEventW.restype = wintypes.HANDLE
+    kernel32.SetEvent.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    event = kernel32.OpenEventW(2, False, ACTIVATE_EVENT)
+    if event:
+        kernel32.SetEvent(event)
+        kernel32.CloseHandle(event)
+        return False
     user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
     user32.FindWindowW.restype = wintypes.HWND
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -52,14 +62,20 @@ def main() -> None:
     if "--dev" not in sys.argv and not _single_instance():
         return
     api = Api()
+    from agent_todo.mobile import MobileAccess
+    api._mobile = MobileAccess(api)
+    api._mobile.start(force="--remote" in sys.argv)
 
     if "--dev" in sys.argv:
         # 開發模式：不開視窗，用瀏覽器開 http://127.0.0.1:8766/?dev
         import time
         port = server.start(dev_api=api, port=8766)
         print(f"http://127.0.0.1:{port}/?dev", flush=True)
-        while True:
-            time.sleep(3600)
+        try:
+            while True:
+                time.sleep(3600)
+        finally:
+            api._mobile.stop()
 
     import webview
 
@@ -69,12 +85,16 @@ def main() -> None:
                                    min_size=(360, 480), background_color="#202020")
     api._attach(window, url)
 
-    def on_closing():
-        if api._mini:
-            api._mini.destroy()
-
-    window.events.closing += on_closing
-    webview.start(debug="--debug" in sys.argv, private_mode=False)
+    from agent_todo.desktop import Desktop
+    desktop = Desktop(api, window)
+    window.events.closing += desktop.closing
+    try:
+        webview.start(desktop.start, debug="--debug" in sys.argv, private_mode=False)
+    finally:
+        api._mobile.stop()
+        desktop.stop.set()
+        if desktop.icon:
+            desktop.icon.stop()
 
 
 if __name__ == "__main__":

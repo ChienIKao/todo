@@ -35,10 +35,16 @@ class McpTests(unittest.TestCase):
             proc.stdin.write(b'{"jsonrpc": "2.0", "method": "notifications/initialized"}\n')
 
             tools = [t["name"] for t in rpc("tools/list")["result"]["tools"]]
-            self.assertEqual(tools, ["list_todos", "get_todo", "add_todo", "update_todo", "add_note", "complete_todo"])
+            self.assertEqual(tools, ["list_todos", "get_todo", "add_todo", "update_todo", "add_note", "complete_todo", "check_subtask"])
 
             call("add_todo", {"title": "寫測試", "context": "用 unittest", "project": "todo"})
             self.assertIn("#1 寫測試", call("list_todos", {})["content"][0]["text"])
+            call("add_todo", {"title": "別的事"})
+            listed = call("list_todos", {"current_repo": "D:\\App\\todo"})["content"][0]["text"].split("\n#")
+            self.assertIn("(this repo)", listed[0])
+            self.assertTrue(listed[1].startswith("2 別的事"))
+            self.assertNotIn("(this repo)", listed[1])
+            call("update_todo", {"id": 2, "status": "done"})
             self.assertIn("用 unittest", call("get_todo", {"id": 1})["content"][0]["text"])
             self.assertIn("status: doing", call("update_todo", {"id": 1, "status": "doing"})["content"][0]["text"])
             call("add_note", {"id": 1, "text": "一半了"})
