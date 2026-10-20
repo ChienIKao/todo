@@ -110,6 +110,30 @@ def test_tailscale_json_and_command(monkeypatch):
     assert "missing" in access.info()["tailscale_error"]
 
 
+def test_setup_reports_serve_enable_url(monkeypatch):
+    access = mobile.MobileAccess(Api())
+    monkeypatch.setattr(mobile.MobileAccess, "info", lambda self: {"serve_ready": False})
+    url = "https://login.tailscale.com/f/serve?node=abc123"
+    stalled = mobile.subprocess.TimeoutExpired(["tailscale"], 15, output=f"\nServe is not enabled on your tailnet.\nTo enable, visit:\n\n         {url}\n")
+    monkeypatch.setattr(mobile.subprocess, "run", Mock(side_effect=stalled))
+    assert access.setup() == {"serve_ready": False, "serve_enable_url": url}
+    monkeypatch.setattr(mobile.subprocess, "run", Mock(side_effect=mobile.subprocess.TimeoutExpired(["tailscale"], 15)))
+    with pytest.raises(RuntimeError, match="沒有回應"):
+        access.setup()
+    monkeypatch.setattr(mobile.subprocess, "run", Mock(return_value=Mock(returncode=1, stderr=f"To enable, visit: {url}", stdout="")))
+    assert access.setup()["serve_enable_url"] == url
+
+
+def test_open_url_only_allows_tailscale(monkeypatch):
+    opened = Mock()
+    monkeypatch.setattr("webbrowser.open", opened)
+    Api().open_url("https://login.tailscale.com/f/serve?node=abc")
+    opened.assert_called_once()
+    with pytest.raises(ValueError):
+        Api().open_url("https://evil.example/")
+    assert "open_url" not in server.REMOTE_METHODS
+
+
 def test_live_toggle_and_qr(monkeypatch):
     monkeypatch.setattr(mobile.MobileAccess, "info", lambda self: {"running": self.httpd is not None})
     # 先由 OS 取得可用埠，設定檔仍使用正常的固定埠值。
