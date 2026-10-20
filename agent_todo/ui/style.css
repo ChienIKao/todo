@@ -42,6 +42,33 @@ button.icon { width: 40px; height: 40px; padding: 8px; flex: none; }
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; min-width: 0; }
 #app { display: flex; flex-direction: column; height: 100%; }
+/* 主視窗的像素標題列與透明縮放區 */
+#titlebar, #resizeEdges { display: none; }
+body.desktop-mode { display: flex; flex-direction: column; border: 2px solid var(--line); overflow: hidden; }
+.desktop-mode #app { flex: 1; min-height: 0; height: auto; }
+.desktop-mode #titlebar { display: flex; flex: none; height: 34px; background: var(--panel); border-bottom: 2px solid var(--line); user-select: none; }
+#titlebarDrag { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding-left: 10px; font-size: 13px; }
+#titlebarDrag > * { pointer-events: none; }
+.window-controls { display: flex; }
+.window-controls button { width: 40px; height: 32px; padding: 6px; border: 0; box-shadow: none; background: var(--clear); }
+.window-controls button:hover { background: var(--panel-2); }
+.window-controls button:active { transform: none; }
+#windowClose:hover { background: var(--red); color: var(--bg); }
+.desktop-mode .overlay { inset: 36px 2px 2px; }
+.desktop-mode #resizeEdges { display: block; }
+#resizeEdges > div { position: fixed; z-index: 20; }
+[data-resize=left], [data-resize=right] { top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+[data-resize=left] { left: 0; }
+[data-resize=right] { right: 0; }
+[data-resize=top], [data-resize=bottom] { left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+[data-resize=top] { top: 0; }
+[data-resize=bottom] { bottom: 0; }
+[data-resize=top-left], [data-resize=top-right], [data-resize=bottom-left], [data-resize=bottom-right] { width: 6px; height: 6px; }
+[data-resize=top-left] { top: 0; left: 0; cursor: nwse-resize; }
+[data-resize=top-right] { top: 0; right: 0; cursor: nesw-resize; }
+[data-resize=bottom-left] { bottom: 0; left: 0; cursor: nesw-resize; }
+[data-resize=bottom-right] { bottom: 0; right: 0; cursor: nwse-resize; }
+.desktop-mode.window-maximized #resizeEdges { display: none; }
 .top { padding: 16px 16px 10px; background: var(--panel); border-bottom: 2px solid var(--line); max-height: 70vh; overflow-y: auto; flex: none; }
 #quickAdd { display: flex; flex-wrap: wrap; gap: 10px; }
 #newTitle { flex: 1; width: 0; }
@@ -152,6 +179,10 @@ body.mini-mode { overflow: hidden; }
 }
 /* 手機版面只給觸控裝置；桌面版視窗雖然窄，仍用滑鼠操作的版面 */
 @media (max-width: 599px) and (pointer: coarse) {
+  body.desktop-mode { display: block; border: 0; overflow: auto; }
+  .desktop-mode #titlebar, .desktop-mode #resizeEdges { display: none; }
+  .desktop-mode #app { height: 100dvh; }
+  .desktop-mode .overlay { inset: 0; }
   #app { height: 100dvh; }
   button, input, select { min-height: 44px; }
   .top { padding: max(12px,env(safe-area-inset-top)) 12px 8px; max-height: none; overflow: visible; }

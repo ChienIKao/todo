@@ -67,6 +67,10 @@ class Desktop:
     def activate(self, focus=False):
         self.window.show()
         self.window.restore()
+        if sys.platform == "win32":
+            user32 = ctypes.windll.user32
+            user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+            user32.SetForegroundWindow(self.window.native.Handle.ToInt64())
         self.window.evaluate_js(f"window.focusNewTodo && window.focusNewTodo({str(focus).lower()})")
 
     def closing(self):

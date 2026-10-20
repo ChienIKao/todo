@@ -641,12 +641,47 @@ function renderCalendar(board, todos) {
 }
 
 // ---------- 啟動 ----------
+window.syncWindowState = maximized => {
+  document.body.classList.toggle("window-maximized", maximized);
+  const button = $("#windowMaximize");
+  button.title = button.ariaLabel = maximized ? "還原" : "最大化";
+  button.replaceChildren(icon(maximized ? "collapse" : "square"));
+};
+
+function bindTitlebar() {
+  if (MINI || REMOTE || !(DEV || window.pywebview?.api)) return;
+  document.body.classList.add("desktop-mode");
+  const windowCall = async (name, ...args) => {
+    try { return await api[name](...args); }
+    catch (e) { if (!DEV) toast(`錯誤：${e?.message || e}`); }
+  };
+  const toggle = async () => {
+    const maximized = await windowCall("toggle_maximize");
+    if (typeof maximized === "boolean") window.syncWindowState(maximized);
+  };
+  $("#windowMinimize").onclick = () => windowCall("minimize_window");
+  $("#windowMaximize").onclick = toggle;
+  $("#windowClose").onclick = () => windowCall("close_window");
+  $("#titlebarDrag").ondblclick = toggle;
+  document.querySelectorAll("[data-resize]").forEach(el => {
+    el.onmousedown = e => {
+      if (e.button !== 0 || document.body.classList.contains("window-maximized")) return;
+      e.preventDefault();
+      windowCall("start_resize", el.dataset.resize);
+    };
+  });
+  windowCall("window_state").then(value => {
+    if (typeof value === "boolean") window.syncWindowState(value);
+  });
+}
+
 async function init() {
   if (init.started) return;
   init.started = true;
   bindTheme();
   document.querySelectorAll("[data-icon]").forEach(el => { el.replaceChildren(icon(el.dataset.icon)); el.setAttribute("aria-label", el.title); });
   api = window.pywebview?.api || httpApi();
+  bindTitlebar();
   MINI ? bindMini() : bindMain();
   await reload();
   poll();

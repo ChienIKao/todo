@@ -10,6 +10,9 @@ from . import __version__, integrations, store, quickadd
 _ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "due", "status",
                "subtasks", "repeat", "remindAt", "order")
 
+_RESIZE_HIT = {"left": 10, "right": 11, "top": 12, "top-left": 13, "top-right": 14,
+               "bottom": 15, "bottom-left": 16, "bottom-right": 17}
+
 
 def _mini_x(screen_width: int) -> int:
     """小視窗靠右的 x 座標。webview.screens 給的是實際像素，視窗位置卻是縮放後的座標，
@@ -30,6 +33,7 @@ class Api:
         self._mini = None
         self._url = ""
         self._mobile = None
+        self._maximized = False
 
     def mobile_info(self) -> dict:
         return self._mobile.info()
@@ -50,6 +54,84 @@ class Api:
     def _attach(self, window, url: str = "") -> None:
         self._window = window
         self._url = url
+        window.events.maximized += self._on_maximized
+        window.events.restored += self._on_restored
+
+    # ---- 主視窗標題列 ----
+    def _on_maximized(self) -> None:
+        self._maximized = True
+        self._sync_window_state()
+
+    def _on_restored(self) -> None:
+        self._maximized = False
+        self._sync_window_state()
+
+    def _sync_window_state(self) -> None:
+        self._window.evaluate_js(
+            f"window.syncWindowState && window.syncWindowState({str(self._maximized).lower()})")
+
+    def window_state(self) -> bool:
+        return self._maximized
+
+    def minimize_window(self) -> None:
+        if self._window:
+            self._window.minimize()
+
+    def toggle_maximize(self) -> bool:
+        if self._window:
+            maximized = not self._maximized
+            if maximized:
+                self._fit_maximize_to_work_area()
+                self._window.maximize()
+            else:
+                self._window.restore()
+            self._maximized = maximized
+        return self._maximized
+
+    def _fit_maximize_to_work_area(self) -> None:
+        """無框視窗最大化預設會蓋住工作列；限制在目前螢幕扣掉工作列的範圍"""
+        if sys.platform != "win32":
+            return
+        try:
+            from System import Action
+            from System.Drawing import Rectangle
+            from System.Windows.Forms import Screen
+        except ImportError:
+            return
+        form = self._window.native
+
+        def fit():
+            screen = Screen.FromControl(form)
+            work, bounds = screen.WorkingArea, screen.Bounds
+            # MaximizedBounds 是相對於所在螢幕左上角的座標
+            form.MaximizedBounds = Rectangle(work.X - bounds.X, work.Y - bounds.Y, work.Width, work.Height)
+
+        form.Invoke(Action(fit))
+
+    def close_window(self) -> None:
+        if self._window:
+            # destroy 會先觸發 Desktop.closing，沿用縮到系統匣的處理
+            self._window.destroy()
+
+    def start_resize(self, direction: str) -> None:
+        hit = _RESIZE_HIT[direction]
+        if not self._window or self._maximized or sys.platform != "win32":
+            return
+        import ctypes
+        from ctypes import wintypes
+        from System import Action
+
+        hwnd = self._window.native.Handle.ToInt64()
+        user32 = ctypes.windll.user32
+        user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        user32.SendMessageW.restype = ctypes.c_ssize_t
+
+        def resize():
+            # 滑鼠擷取屬於 UI 執行緒，要在同一個執行緒交給 Windows 縮放
+            user32.ReleaseCapture()
+            user32.SendMessageW(hwnd, 0x00A1, hit, 0)
+
+        self._window.native.Invoke(Action(resize))
 
     # ---- 待辦 ----
     def version(self) -> float:

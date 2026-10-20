@@ -82,7 +82,8 @@ def main() -> None:
     port = server.start()
     url = f"http://127.0.0.1:{port}/"
     window = webview.create_window(TITLE, url, js_api=api, text_select=True, width=480, height=780,
-                                   min_size=(360, 480), background_color="#0e0f14")
+                                   min_size=(360, 480), frameless=True, easy_drag=False,
+                                   background_color="#0e0f14")
     api._attach(window, url)
 
     from agent_todo.desktop import Desktop
