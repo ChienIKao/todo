@@ -396,10 +396,28 @@ function renderMobile(info) {
     h("div", { class: "row" }, h("label", {}, "連接埠", port), h("button", { onclick: () => configure() }, "套用")),
     h("button", { onclick: () => { if (confirm("重新產生 token 後，舊的手機都要重新掃描 QR code 配對。繼續？")) configure(true); } }, "重新產生 token"),
     info.error && h("p", { class: "danger" }, info.error));
+  // App 視窗裡點連結不會開新視窗，改用系統瀏覽器開
+  const link = (url, text) => h("a", { href: url, target: "_blank", rel: "noopener noreferrer", onclick: e => {
+    if (DEV) return;
+    e.preventDefault();
+    call("open_url", url);
+  } }, text);
   if (!info.logged_in) {
     body.append(h("p", {}, "在電腦和手機安裝 Tailscale，登入同一個帳號，並確認電腦已連線。"),
-      h("a", { href: "https://tailscale.com/download", target: "_blank", rel: "noopener noreferrer" }, "Tailscale 官網與下載"),
+      link("https://tailscale.com/download", "Tailscale 官網與下載"),
       info.tailscale_error && h("pre", { class: "cmd" }, info.tailscale_error));
+  } else if (info.serve_enable_url) {
+    body.append(h("p", { class: "danger" }, "你的 Tailscale 網路還沒開啟 Serve（HTTPS）。"),
+      h("p", {}, "打開下面的網址，用你的 Tailscale 帳號登入並按啟用，完成後回來再按一次「幫我設定」。"),
+      h("pre", { class: "cmd" }, info.serve_enable_url),
+      h("div", { class: "row" }, h("button", { class: "primary", onclick: () => call("open_url", info.serve_enable_url) }, "在瀏覽器開啟"),
+        h("button", { onclick: () => copy(info.serve_enable_url) }, "複製網址")),
+      h("button", { onclick: async e => {
+        e.target.disabled = true;
+        try { renderMobile(await call("mobile_setup")); }
+        catch (err) { body.append(h("pre", { class: "cmd" }, err.message)); }
+        finally { e.target.disabled = false; }
+      } }, "幫我設定"));
   } else if (!info.serve_ready) {
     body.append(h("p", {}, "將 HTTPS 443 轉到這個連接埠："), h("pre", { class: "cmd" }, info.command),
       h("button", { onclick: async e => {

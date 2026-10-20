@@ -27,6 +27,13 @@ class Api:
     def mobile_setup(self) -> dict:
         return self._mobile.setup()
 
+    def open_url(self, url: str) -> None:
+        """用系統瀏覽器開 Tailscale 的網頁（App 視窗內點連結不會開新視窗）"""
+        if not url.startswith(("https://login.tailscale.com/", "https://tailscale.com/")):
+            raise ValueError("只能開啟 Tailscale 的網址")
+        import webbrowser
+        webbrowser.open(url)
+
     def _attach(self, window, url: str = "") -> None:
         self._window = window
         self._url = url

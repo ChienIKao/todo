@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -36,13 +37,16 @@ def save_settings(data):
     return data
 
 
-def _tailscale(*args):
+_ENABLE_URL = re.compile(r"https://login\.tailscale\.com/\S+")
+
+
+def _tailscale(*args, timeout=30):
     exe = shutil.which("tailscale")
     if not exe:
         candidate = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Tailscale/tailscale.exe"
         exe = str(candidate) if candidate.is_file() else "tailscale"
     result = subprocess.run([exe, *args], capture_output=True, text=True, encoding="utf-8",
-                            timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                            timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if result.returncode:
         raise RuntimeError((result.stderr or result.stdout).strip() or "Tailscale 執行失敗")
     return result.stdout
@@ -117,5 +121,18 @@ class MobileAccess:
         return info
 
     def setup(self):
-        _tailscale("serve", "--bg", str(self.settings["port"]))
+        # tailnet 還沒開 Serve 時，tailscale 會印出開通網址然後一直等，不會自己結束
+        try:
+            _tailscale("serve", "--bg", str(self.settings["port"]), timeout=15)
+        except subprocess.TimeoutExpired as exc:
+            output = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else exc.stdout or ""
+            url = _ENABLE_URL.search(output)
+            if not url:
+                raise RuntimeError("Tailscale 沒有回應，確認電腦上的 Tailscale 已連線後再試一次") from None
+            return {**self.info(), "serve_enable_url": url[0]}
+        except RuntimeError as exc:
+            url = _ENABLE_URL.search(str(exc))
+            if not url:
+                raise
+            return {**self.info(), "serve_enable_url": url[0]}
         return self.info()
