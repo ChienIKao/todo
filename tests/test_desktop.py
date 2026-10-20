@@ -136,3 +136,12 @@ def test_dev_mode_skips_desktop(monkeypatch):
         main.main()
     single.assert_not_called()
     start.assert_not_called()
+
+
+@pytest.mark.parametrize("dpi,width,expected", [(96, 1920, 1560), (120, 1920, 1176), (144, 2880, 1560)])
+def test_mini_window_stays_on_scaled_screen(monkeypatch, dpi, width, expected):
+    import ctypes
+    from agent_todo import api
+    monkeypatch.setattr(api.sys, "platform", "win32")
+    monkeypatch.setattr(ctypes, "windll", Mock(user32=Mock(GetDpiForSystem=Mock(return_value=dpi))), raising=False)
+    assert api._mini_x(width) == expected

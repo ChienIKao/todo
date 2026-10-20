@@ -11,6 +11,19 @@ _ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "d
                "subtasks", "repeat", "remindAt", "order")
 
 
+def _mini_x(screen_width: int) -> int:
+    """小視窗靠右的 x 座標。webview.screens 給的是實際像素，視窗位置卻是縮放後的座標，
+    螢幕縮放 125% 時直接相減會把小視窗放到螢幕外面"""
+    scale = 1.0
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            scale = ctypes.windll.user32.GetDpiForSystem() / 96 or 1.0
+        except (AttributeError, OSError):
+            pass
+    return max(0, int(screen_width / scale) - 360)
+
+
 class Api:
     def __init__(self):
         self._window = None
@@ -117,10 +130,9 @@ class Api:
             return
         import webview
 
-        work = webview.screens[0] if webview.screens else None
-        x = (work.width - 360) if work else None
+        x = _mini_x(webview.screens[0].width) if webview.screens else None
         self._mini = webview.create_window("Agent Todo・小視窗", f"{self._url}?mini=1", js_api=self, width=320,
-                                           height=480, x=x, y=60 if work else None, min_size=(260, 200),
+                                           height=480, x=x, y=60 if x is not None else None, min_size=(260, 200),
                                            frameless=True, easy_drag=False, on_top=True, background_color="#0e0f14")
         self._mini.events.closed += self._mini_closed
         if self._window:
