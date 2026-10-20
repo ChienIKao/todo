@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 
 from . import __version__, integrations, store, quickadd
 
@@ -12,6 +13,39 @@ _ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "d
                "subtasks", "repeat", "remindAt", "order")
 
 _PREFS = {"theme": ("dark", "light", "beige"), "view": ("today", "upcoming", "all", "calendar", "trash")}
+_PREFS_LOCK = threading.Lock()
+
+_MINI_DEFAULTS = {
+    "layout": "focus", "badges": {"due": True, "assignee": True, "project": False,
+                                  "remind": True, "subtasks": True, "priority": True},
+    "scope": "open", "scopeValue": "", "density": "compact", "fontSize": "normal",
+    "addBox": "button", "timelineDays": 14,
+}
+_MINI_CHOICES = {"layout": ("list", "focus", "timeline"), "scope": ("open", "today", "project", "assignee"),
+                 "density": ("compact", "cozy"), "fontSize": ("small", "normal", "large"),
+                 "addBox": ("bottom", "button"), "timelineDays": (7, 14, 30)}
+
+
+def _mini_prefs(data, previous=None) -> dict:
+    """只合併已知欄位，錯誤值回到預設；標記逐項更新。"""
+    result = {**_MINI_DEFAULTS, **(previous or {})}
+    result["badges"] = {**_MINI_DEFAULTS["badges"], **result["badges"]}
+    if not isinstance(data, dict):
+        return result
+    for key, value in data.items():
+        if key == "badges":
+            if isinstance(value, dict):
+                for badge, enabled in value.items():
+                    if badge in result["badges"]:
+                        result["badges"][badge] = enabled if type(enabled) is bool else _MINI_DEFAULTS["badges"][badge]
+            else:
+                result["badges"] = dict(_MINI_DEFAULTS["badges"])
+        elif key == "scopeValue":
+            result[key] = value if isinstance(value, str) else ""
+        elif key in _MINI_CHOICES:
+            valid = value in _MINI_CHOICES[key] and (key != "timelineDays" or type(value) is int)
+            result[key] = value if valid else _MINI_DEFAULTS[key]
+    return result
 
 _RESIZE_HIT = {"left": 10, "right": 11, "top": 12, "top-left": 13, "top-right": 14,
                "bottom": 15, "bottom-left": 16, "bottom-right": 17}
@@ -44,17 +78,26 @@ class Api:
         try:
             data = json.loads((store.data_dir() / "ui.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return {}
-        return {k: v for k, v in data.items() if k in _PREFS and v in _PREFS[k]} if isinstance(data, dict) else {}
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        return {**{k: v for k, v in data.items() if k in _PREFS and v in _PREFS[k]},
+                "mini": _mini_prefs(data.get("mini"))}
 
     def set_prefs(self, changes: dict) -> dict:
-        prefs = {**self.get_prefs(), **{k: v for k, v in changes.items() if k in _PREFS and v in _PREFS[k]}}
-        path = store.data_dir() / "ui.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(path)
-        return prefs
+        # 兩個視窗可能同時寫入，合併與替換檔案要在同一把鎖裡。
+        with _PREFS_LOCK:
+            prefs = self.get_prefs()
+            if isinstance(changes, dict):
+                prefs.update({k: v for k, v in changes.items() if k in _PREFS and v in _PREFS[k]})
+                if "mini" in changes:
+                    prefs["mini"] = _mini_prefs(changes["mini"], prefs["mini"])
+            path = store.data_dir() / "ui.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
+            return prefs
 
     def mobile_info(self) -> dict:
         return self._mobile.info()

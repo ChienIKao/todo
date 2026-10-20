@@ -181,10 +181,86 @@ def test_remote_pixel_assets(remote, path, mime):
 def test_ui_prefs_persist_in_file(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
     api = Api()
-    assert api.get_prefs() == {}
-    assert api.set_prefs({"theme": "beige"}) == {"theme": "beige"}
-    assert api.set_prefs({"view": "calendar", "theme": "neon", "evil": 1}) == {"theme": "beige", "view": "calendar"}
-    assert Api().get_prefs() == {"theme": "beige", "view": "calendar"}  # 重開 App 後還在
+    defaults = api.get_prefs()
+    assert defaults["mini"]["layout"] == "focus"
+    assert api.set_prefs({"theme": "beige"}) == {**defaults, "theme": "beige"}
+    assert api.set_prefs({"view": "calendar", "theme": "neon", "evil": 1}) == {**defaults, "theme": "beige", "view": "calendar"}
+    assert Api().get_prefs() == {**defaults, "theme": "beige", "view": "calendar"}  # 重開 App 後還在
     (tmp_path / "ui.json").write_text("not json", encoding="utf-8")
-    assert Api().get_prefs() == {}
+    assert Api().get_prefs() == defaults
     assert "get_prefs" not in server.REMOTE_METHODS and "set_prefs" not in server.REMOTE_METHODS
+
+
+def test_mini_prefs_defaults_and_partial_updates(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    api = Api()
+    defaults = {"layout": "focus", "badges": {"due": True, "assignee": True, "project": False,
+                "remind": True, "subtasks": True, "priority": True}, "scope": "open", "scopeValue": "",
+                "density": "compact", "fontSize": "normal", "addBox": "button", "timelineDays": 14}
+    assert api.get_prefs() == {"mini": defaults}
+    custom = {"layout": "timeline", "badges": {k: not v for k, v in defaults["badges"].items()},
+              "scope": "project", "scopeValue": "測試專案", "density": "cozy", "fontSize": "large",
+              "addBox": "bottom", "timelineDays": 30}
+    assert api.set_prefs({"theme": "light", "view": "all", "mini": custom})["mini"] == custom
+    result = api.set_prefs({"mini": {"badges": {"due": True}, "layout": "list"}})
+    expected = {**custom, "layout": "list", "badges": {**custom["badges"], "due": True}}
+    assert result == {"theme": "light", "view": "all", "mini": expected}
+    assert Api().get_prefs() == result
+    assert api.set_prefs({"mini": {"unknown": 42, "badges": {"unknown": True}}}) == result
+    assert api.set_prefs({"theme": "beige"})["mini"] == expected
+
+
+@pytest.mark.parametrize("key,value", [
+    ("layout", "cards"), ("scope", []), ("scopeValue", 1), ("density", None),
+    ("fontSize", "huge"), ("addBox", {}), ("timelineDays", "7"), ("timelineDays", True),
+    ("timelineDays", 7.0), ("timelineDays", 60), ("badges", False),
+])
+def test_mini_prefs_invalid_values(tmp_path, monkeypatch, key, value):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    api = Api()
+    defaults = api.get_prefs()["mini"]
+    (tmp_path / "ui.json").write_text(json.dumps({"mini": {key: value, "unknown": 1}}), encoding="utf-8")
+    assert api.get_prefs()["mini"] == defaults
+    assert api.set_prefs({"mini": {key: value}})["mini"] == defaults
+
+
+@pytest.mark.parametrize("value", [0, 1, "false", None, [], {}])
+def test_mini_badges_require_boolean(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    result = Api().set_prefs({"mini": {"badges": {"due": value, "project": value}}})["mini"]
+    assert result["badges"]["due"] is True
+    assert result["badges"]["project"] is False
+
+
+@pytest.mark.parametrize("value", [None, [], "focus", 5])
+def test_mini_prefs_invalid_object(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    defaults = Api().get_prefs()
+    (tmp_path / "ui.json").write_text(json.dumps({"mini": value}), encoding="utf-8")
+    assert Api().get_prefs() == defaults
+
+
+@pytest.mark.parametrize("key,values", [
+    ("layout", ["list", "focus", "timeline"]), ("scope", ["open", "today", "project", "assignee"]),
+    ("density", ["compact", "cozy"]), ("fontSize", ["small", "normal", "large"]),
+    ("addBox", ["bottom", "button"]), ("timelineDays", [7, 14, 30]),
+])
+def test_mini_prefs_valid_choices(tmp_path, monkeypatch, key, values):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    for value in values:
+        assert Api().set_prefs({"mini": {key: value}})["mini"][key] == value
+
+
+def test_mini_prefs_two_windows_merge_updates(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    changes = [{"theme": "beige"}, {"view": "all"}, {"mini": {"layout": "timeline"}},
+               {"mini": {"badges": {"due": False}}}, {"mini": {"badges": {"project": True}}}]
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        list(pool.map(lambda change: Api().set_prefs(change), changes))
+    result = Api().get_prefs()
+    assert result["theme"] == "beige" and result["view"] == "all"
+    assert result["mini"]["layout"] == "timeline"
+    assert result["mini"]["badges"]["due"] is False
+    assert result["mini"]["badges"]["project"] is True

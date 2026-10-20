@@ -78,15 +78,28 @@ async function loadPrefs() {
   return prefs;
 }
 function savePref(key, value) {
-  try { localStorage.setItem(key === "theme" ? "todoTheme" : "todoView", value); } catch { /* 無法儲存時仍可切換 */ }
-  if (!REMOTE) api.set_prefs({ [key]: value }).catch(() => {});
+  try { if (key !== "mini") localStorage.setItem(key === "theme" ? "todoTheme" : "todoView", value); } catch { /* 無法儲存時仍可切換 */ }
+  if (!REMOTE) {
+    ++prefWrites;
+    prefQueue = prefQueue.catch(() => {}).then(() => call("set_prefs", { [key]: value })).finally(() => { --prefWrites; });
+    prefQueue.catch(() => {});
+  }
 }
-// 小視窗跟主視窗共用 ui.json：輪詢時讀一次，主題換了就跟著換
+// 小視窗跟主視窗共用 ui.json：輪詢時同步主題與小視窗設定。
 async function refreshTheme() {
   if (REMOTE) return;
   try {
-    const { theme } = await api.get_prefs();
-    if (theme && theme !== themeChoice) { themeChoice = theme; syncTheme(); }
+    if (prefWrites) return;
+    const prefs = await api.get_prefs();
+    if (prefWrites) return;
+    const themeChanged = prefs.theme && prefs.theme !== themeChoice;
+    if (themeChanged) { themeChoice = prefs.theme; syncTheme(); }
+    const miniChanged = prefs.mini && JSON.stringify(prefs.mini) !== JSON.stringify(miniPrefs);
+    if (miniChanged) {
+      miniPrefs = prefs.mini;
+      if (MINI) renderMini();
+    }
+    if ((miniChanged || themeChanged) && !$("#settingsPanel").classList.contains("hidden")) renderSettings();
   } catch { /* 下次輪詢再試 */ }
 }
 function syncTheme() {
@@ -165,7 +178,7 @@ async function reload() {
 
 // AI 或 todo 指令改了清單：輪詢資料檔的修改時間，有變就重新載入
 async function poll() {
-  refreshTheme();
+  await refreshTheme();
   if (document.hidden) return;
   try {
     const v = await api.version();
@@ -503,20 +516,12 @@ function renderAi(info) {
 }
 
 // ---------- 置頂小視窗 ----------
-function renderMini() {
-  const open = S.todos.filter((t) => t.status !== "done");
-  $("#miniCount").textContent = open.length ? `${open.length} 件` : "";
-  $("#miniList").replaceChildren(...open.map((t) =>
-    h("div", { class: `mini-item ${t.status}${t.priority === "high" ? " high" : ""}` },
-      checkbox({ title: "完成", onchange: () => save(t.id, { status: "done" }) }),
-      h("div", { class: "t", title: "在主視窗開啟", onclick: () => api.open_in_main(t.id) }, t.title))));
-  if (!open.length) $("#miniList").append(h("p", { class: "empty" }, "都做完了"));
-}
-
 function bindMini() {
   document.body.classList.add("mini-mode");
   $("#app").classList.add("hidden");
   $("#mini").classList.remove("hidden");
+  $("#miniAddBtn").onclick = () => { miniAdding = !miniAdding; renderMini(); if (miniAdding) $("#miniTitle").focus(); };
+  $("#miniTitle").onkeydown = e => { if (e.key === "Escape") { miniAdding = false; renderMini(); $("#miniAddBtn").focus(); } };
   $("#miniAdd").onsubmit = async (e) => {
     e.preventDefault();
     const title = $("#miniTitle").value;
@@ -528,7 +533,7 @@ function bindMini() {
       if (!$("#miniTitle").value) $("#miniTitle").value = title;
       return;
     }
-    if (!$("#miniTitle").value) $("#miniTitle").blur();
+    if (!$("#miniTitle").value) { $("#miniTitle").blur(); miniAdding = false; }
     reload();
   };
   $("#miniExpand").onclick = () => api.close_mini();
@@ -700,10 +705,12 @@ async function init() {
   api = window.pywebview?.api || httpApi();
   const prefs = await loadPrefs();
   themeChoice = prefs.theme;
+  if (prefs.mini) miniPrefs = prefs.mini;
   if (VIEWS[prefs.view]) S.view = prefs.view;
   bindTheme();
   document.querySelectorAll("[data-icon]").forEach(el => { el.replaceChildren(icon(el.dataset.icon)); el.setAttribute("aria-label", el.title); });
   bindTitlebar();
+  bindSettings();
   MINI ? bindMini() : bindMain();
   await reload();
   poll();
