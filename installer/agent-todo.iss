@@ -29,6 +29,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
+; 只關 AgentTodo.exe；todo.exe 是 Claude Code／Codex 的 MCP server，關掉會讓它們卡住（改名處理，見 [Code]）
+CloseApplicationsFilter=AgentTodo.exe
 ChangesEnvironment=yes
 
 [Languages]

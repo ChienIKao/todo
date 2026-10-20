@@ -14,6 +14,20 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="titlebar">
+  <div id="titlebarDrag" class="pywebview-drag-region"><span data-icon="list-box"></span><span>Agent Todo</span></div>
+  <div class="window-controls">
+    <button id="windowMinimize" title="最小化" data-icon="minus"></button>
+    <button id="windowMaximize" title="最大化" data-icon="square"></button>
+    <button id="windowClose" title="關閉" data-icon="close"></button>
+  </div>
+</div>
+<div id="resizeEdges" aria-hidden="true">
+  <div data-resize="left"></div><div data-resize="right"></div>
+  <div data-resize="top"></div><div data-resize="bottom"></div>
+  <div data-resize="top-left"></div><div data-resize="top-right"></div>
+  <div data-resize="bottom-left"></div><div data-resize="bottom-right"></div>
+</div>
 <div id="app">
   <div id="offlineBanner" class="hidden" role="status">連不到電腦，顯示的是上次的資料</div>
   <header class="top">
