@@ -26,6 +26,9 @@ a { color: var(--accent); }
 button, input, select, textarea { font: inherit; color: var(--ink); border: 2px solid var(--line); padding: 6px 10px; min-width: 0; background: var(--panel-2); }
 input::placeholder, textarea::placeholder { color: var(--dim); opacity: 1; }
 textarea { width: 100%; resize: vertical; }
+/* iOS Safari 的日期欄位有固定最小寬度、內容置中，會撐出格子；拿掉原生外觀並靠左 */
+input[type=date], input[type=datetime-local] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; text-align: left; }
+input::-webkit-date-and-time-value { text-align: left; }
 button { cursor: pointer; background: var(--panel); box-shadow: 4px 4px 0 var(--line); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 button:hover { background: var(--panel-2); color: var(--accent); }
 button:active { transform: translate(4px,4px); box-shadow: none; }
