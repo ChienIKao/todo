@@ -181,6 +181,8 @@ python -m venv .venv
 .\build.ps1                             # 打包，有 Inno Setup 6 會再產生安裝程式
 ```
 
+安裝程式升級時會先把現有的 `todo.exe` 改名成 `todo.exe.<時間>.old`（Claude Code／Codex 開著的 MCP server 照樣跑，不會被關掉），再放入新版；之後安裝或解除安裝時會清掉已經沒在用的 `.old` 檔。`AgentTodo.exe` 若正在執行會先被結束，靜默安裝完會自動重新開啟。
+
 `python main.py --dev` 不開視窗，改在瀏覽器開 `http://127.0.0.1:8766/?dev` 方便改介面；加上 `--remote` 會一起開手機用的伺服器（`127.0.0.1:8767`）。
 
 推送 `v*` 標籤（要跟 `agent_todo/__init__.py` 的版本一致）會由 GitHub Actions 跑測試、打包並建立 Release。
