@@ -1,6 +1,7 @@
 """介面呼叫的 API（pywebview js_api）：每個公開方法都可以從 JS 以 pywebview.api.xxx() 呼叫"""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -9,6 +10,8 @@ from . import __version__, integrations, store, quickadd
 
 _ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "due", "status",
                "subtasks", "repeat", "remindAt", "order")
+
+_PREFS = {"theme": ("dark", "light", "beige"), "view": ("today", "upcoming", "all", "calendar", "trash")}
 
 _RESIZE_HIT = {"left": 10, "right": 11, "top": 12, "top-left": 13, "top-right": 14,
                "bottom": 15, "bottom-left": 16, "bottom-right": 17}
@@ -34,6 +37,24 @@ class Api:
         self._url = ""
         self._mobile = None
         self._maximized = False
+
+    # ---- 介面偏好 ----
+    # 主題、目前分頁存在檔案裡：App 內部伺服器每次啟動連接埠都不同，瀏覽器的 localStorage 會跟著換一份
+    def get_prefs(self) -> dict:
+        try:
+            data = json.loads((store.data_dir() / "ui.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return {k: v for k, v in data.items() if k in _PREFS and v in _PREFS[k]} if isinstance(data, dict) else {}
+
+    def set_prefs(self, changes: dict) -> dict:
+        prefs = {**self.get_prefs(), **{k: v for k, v in changes.items() if k in _PREFS and v in _PREFS[k]}}
+        path = store.data_dir() / "ui.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+        return prefs
 
     def mobile_info(self) -> dict:
         return self._mobile.info()
