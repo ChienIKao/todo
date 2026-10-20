@@ -176,3 +176,15 @@ def test_remote_pixel_assets(remote, path, mime):
     assert status == 200
     assert headers["Content-Type"] == mime
     assert body
+
+
+def test_ui_prefs_persist_in_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    api = Api()
+    assert api.get_prefs() == {}
+    assert api.set_prefs({"theme": "beige"}) == {"theme": "beige"}
+    assert api.set_prefs({"view": "calendar", "theme": "neon", "evil": 1}) == {"theme": "beige", "view": "calendar"}
+    assert Api().get_prefs() == {"theme": "beige", "view": "calendar"}  # 重開 App 後還在
+    (tmp_path / "ui.json").write_text("not json", encoding="utf-8")
+    assert Api().get_prefs() == {}
+    assert "get_prefs" not in server.REMOTE_METHODS and "set_prefs" not in server.REMOTE_METHODS

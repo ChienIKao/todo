@@ -67,9 +67,29 @@ function checkbox(attrs) {
 }
 const THEMES = { dark: ["黑", "moon"], light: ["白", "sun"], beige: ["米", "notebook"] };
 let themeChoice = null;
-let themeStorage = true;
+// 桌面版把主題、分頁存在 ~/.agent-todo/ui.json：內部伺服器每次啟動的連接埠不同，localStorage 會跟著換一份
+// 手機（遠端）各自用 localStorage
+async function loadPrefs() {
+  let prefs = {};
+  try { prefs = { theme: localStorage.getItem("todoTheme"), view: localStorage.getItem("todoView") }; } catch { /* 沒有儲存空間 */ }
+  if (!REMOTE) {
+    try { prefs = { ...prefs, ...await api.get_prefs() }; } catch { /* 讀不到就用本機的 */ }
+  }
+  return prefs;
+}
+function savePref(key, value) {
+  try { localStorage.setItem(key === "theme" ? "todoTheme" : "todoView", value); } catch { /* 無法儲存時仍可切換 */ }
+  if (!REMOTE) api.set_prefs({ [key]: value }).catch(() => {});
+}
+// 小視窗跟主視窗共用 ui.json：輪詢時讀一次，主題換了就跟著換
+async function refreshTheme() {
+  if (REMOTE) return;
+  try {
+    const { theme } = await api.get_prefs();
+    if (theme && theme !== themeChoice) { themeChoice = theme; syncTheme(); }
+  } catch { /* 下次輪詢再試 */ }
+}
 function syncTheme() {
-  try { if (themeStorage) themeChoice = localStorage.getItem("todoTheme"); } catch { /* 無法儲存時沿用本次選擇 */ }
   const theme = THEMES[themeChoice] ? themeChoice : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   document.documentElement.dataset.theme = theme;
   $("meta[name=theme-color]").content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
@@ -81,10 +101,9 @@ function bindTheme() {
   $("#themeBtn").onclick = () => {
     const keys = Object.keys(THEMES);
     themeChoice = keys[(keys.indexOf(document.documentElement.dataset.theme) + 1) % keys.length];
-    try { localStorage.setItem("todoTheme", themeChoice); } catch { themeStorage = false; }
+    savePref("theme", themeChoice);
     syncTheme();
   };
-  window.addEventListener("storage", syncTheme);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncTheme);
   syncTheme();
 }
@@ -146,7 +165,7 @@ async function reload() {
 
 // AI 或 todo 指令改了清單：輪詢資料檔的修改時間，有變就重新載入
 async function poll() {
-  syncTheme();
+  refreshTheme();
   if (document.hidden) return;
   try {
     const v = await api.version();
@@ -529,7 +548,7 @@ function inView(t, view) {
 }
 function switchView(view) {
   S.view = view;
-  try { localStorage.setItem("todoView", view); } catch { /* 無法儲存時仍可切換 */ }
+  savePref("view", view);
   render();
 }
 window.focusNewTodo = focus => { window.focus(); if (focus) $("#newTitle").focus(); };
@@ -678,9 +697,12 @@ function bindTitlebar() {
 async function init() {
   if (init.started) return;
   init.started = true;
+  api = window.pywebview?.api || httpApi();
+  const prefs = await loadPrefs();
+  themeChoice = prefs.theme;
+  if (VIEWS[prefs.view]) S.view = prefs.view;
   bindTheme();
   document.querySelectorAll("[data-icon]").forEach(el => { el.replaceChildren(icon(el.dataset.icon)); el.setAttribute("aria-label", el.title); });
-  api = window.pywebview?.api || httpApi();
   bindTitlebar();
   MINI ? bindMini() : bindMain();
   await reload();
