@@ -12,7 +12,7 @@ from . import __version__, integrations, store, quickadd
 _ADD_FIELDS = ("title", "context", "priority", "project", "tags", "assignee", "due", "status",
                "subtasks", "repeat", "remindAt", "order")
 
-_PREFS = {"theme": ("dark", "light", "beige"), "view": ("today", "upcoming", "all", "calendar", "trash")}
+_PREFS = {"theme": ("system", "dark", "light", "beige"), "view": ("today", "upcoming", "all", "calendar", "trash")}
 _PREFS_LOCK = threading.Lock()
 
 _MINI_DEFAULTS = {

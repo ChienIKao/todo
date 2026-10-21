@@ -47,7 +47,7 @@
           </select>
         </div>
         <div class="row">
-          <input id="newAssignee" placeholder="負責（me／claude／codex）" list="assignees">
+          <select id="newAssignee" aria-label="負責"><option value="">不指定</option></select>
           <input id="newDue" type="date">
         </div>
         <input id="newTags" placeholder="標籤，用逗號分隔">
@@ -61,30 +61,14 @@
     <div class="bar">
       <select id="filterProject"><option value="">全部專案</option></select>
       <input id="filterQuery" placeholder="搜尋…">
-      <button id="themeBtn" class="icon" title="切換主題"></button>
       <button id="settingsBtn" title="設定"><span data-icon="settings-cog"></span>設定</button>
       <button id="miniBtn" class="icon" title="置頂小視窗" data-icon="picture-in-picture"></button>
-      <button id="aiBtn" class="icon" title="接上 AI" data-icon="robot"></button>
-      <button id="mobileBtn" class="icon" title="手機存取" data-icon="smartphone"></button>
     </div>
     <nav id="tabs" aria-label="檢視"></nav>
   </header>
   <main id="board"></main>
 </div>
 
-<div id="aiPanel" class="overlay hidden">
-  <div class="sheet">
-    <div class="sheet-head"><b>接上 AI</b><button id="aiClose" class="icon" title="關閉" data-icon="close"></button></div>
-    <div id="aiBody"></div>
-  </div>
-</div>
-
-<div id="mobilePanel" class="overlay hidden">
-  <div class="sheet">
-    <div class="sheet-head"><b>手機存取</b><button id="mobileClose" class="icon" title="關閉" data-icon="close"></button></div>
-    <div id="mobileBody"></div>
-  </div>
-</div>
 <div id="settingsPanel" class="overlay hidden" role="dialog" aria-modal="true" aria-label="設定">
   <div class="sheet"><div class="sheet-head"><b>設定</b><button id="settingsClose" class="icon" title="關閉設定" data-icon="close"></button></div><div id="settingsBody"></div></div>
 </div>
@@ -92,6 +76,7 @@
   <div class="mini-head">
     <div class="mini-heading pywebview-drag-region"><b id="miniName"></b><span id="miniCount"></span></div>
     <button id="miniAddBtn" class="icon" title="新增待辦" data-icon="plus"></button>
+    <button id="miniLayout" class="icon" title="切換排法"></button>
     <button id="miniSettings" class="icon" title="小視窗設定" data-icon="settings-cog"></button>
     <button id="miniExpand" class="icon" title="回主視窗" data-icon="external-link"></button>
     <button id="miniClose" class="icon" title="關閉小視窗" data-icon="close"></button>
@@ -101,7 +86,6 @@
 </div>
 
 <datalist id="projects"></datalist>
-<datalist id="assignees"><option value="me"><option value="claude"><option value="codex"></datalist>
 <div id="toast" class="hidden"></div>
 <script src="mini.js"></script>
 <script src="app.js"></script>

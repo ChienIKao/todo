@@ -110,6 +110,9 @@ function renderMini() {
   root.dataset.density = miniPrefs.density;
   root.dataset.fontSize = miniPrefs.fontSize;
   $("#miniName").textContent = MINI_LAYOUTS[miniPrefs.layout];
+  const layoutButton = $("#miniLayout");
+  layoutButton.title = layoutButton.ariaLabel = `排法：${MINI_LAYOUTS[miniPrefs.layout]}（點一下切換）`;
+  layoutButton.replaceChildren(icon({ list: "list-box", focus: "zap", timeline: "calendar-weeks" }[miniPrefs.layout]));
   $("#miniCount").textContent = `今天 ${open.filter(t => inView(t, "today")).length} · 卡住 ${open.filter(t => t.status === "blocked").length}`;
   $("#miniAddBtn").classList.toggle("hidden", miniPrefs.addBox !== "button");
   $("#miniAdd").classList.toggle("hidden", miniPrefs.addBox === "button" && !miniAdding);
@@ -196,12 +199,21 @@ function renderSettings() {
   const activeId = active?.id;
   const activeLabel = active?.getAttribute("aria-label");
   body.replaceChildren();
-  if (!MINI) body.append(settingsTabs({ general: "一般", mini: "小視窗" }, settingsTab, key => { settingsTab = key; renderSettings(); }, "settings"));
+  if (!MINI) body.append(settingsTabs(REMOTE ? { general: "一般" } : { general: "一般", mini: "小視窗", ai: "接上 AI", mobile: "手機存取" },
+    settingsTab, key => { settingsTab = key; renderSettings(); }, "settings"));
   const panel = h("div", MINI ? {} : { id: "settings-body", role: "tabpanel", "aria-labelledby": `settings-${settingsTab}` });
   if (MINI || settingsTab === "mini") panel.append(...miniSettingsControls());
+  else if (settingsTab === "ai" || settingsTab === "mobile") {
+    const mobile = settingsTab === "mobile";
+    const content = h("div", { id: mobile ? "mobileBody" : "aiBody" }, mobile ? "正在偵測 Tailscale…" : "讀取中…");
+    panel.append(content);
+    call(mobile ? "mobile_info" : "info").then(info => {
+      if (content.isConnected) (mobile ? renderMobile : renderAi)(info, content);
+    }).catch(() => { content.textContent = "讀取失敗，請切換頁籤後重試"; });
+  }
   else panel.append(h("div", { class: "settings-content" }, h("label", {}, "主題", h("select", { "aria-label": "主題", onchange: e => {
     themeChoice = e.target.value; savePref("theme", themeChoice); syncTheme();
-  } }, Object.entries(THEMES).map(([key, [label]]) => h("option", { value: key, selected: document.documentElement.dataset.theme === key }, label))))));
+  } }, Object.entries({ system: ["跟隨系統"], ...THEMES }).map(([key, [label]]) => h("option", { value: key, selected: themeChoice === key }, label))))));
   body.append(panel);
   if (activeId) document.getElementById(activeId)?.focus();
   else if (activeLabel) [...body.querySelectorAll("[aria-label]")].find(el => el.getAttribute("aria-label") === activeLabel)?.focus();
@@ -217,11 +229,10 @@ function bindSettings() {
   panel.onkeydown = e => {
     if (e.key === "Escape") { e.preventDefault(); close(); }
     if (e.key === "Tab") {
-      const controls = [...panel.querySelectorAll('button:not([tabindex="-1"]), select, input')];
+      const controls = [...panel.querySelectorAll('button:not([tabindex="-1"]):not(:disabled), select:not(:disabled), input:not(:disabled), a[href], summary')];
       const first = controls[0], last = controls.at(-1);
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   };
-  if (REMOTE) $("#settingsBtn").classList.add("hidden");
 }
