@@ -73,7 +73,10 @@ async function loadPrefs() {
   let prefs = {};
   try { prefs = { theme: localStorage.getItem("todoTheme"), view: localStorage.getItem("todoView") }; } catch { /* 沒有儲存空間 */ }
   if (!REMOTE) {
-    try { prefs = { ...prefs, ...await api.get_prefs() }; } catch { /* 讀不到就用本機的 */ }
+    try {
+      const desktopPrefs = await api.get_prefs();
+      prefs = { ...prefs, ...desktopPrefs, theme: desktopPrefs.theme || "system" };
+    } catch { /* 讀不到就用本機的 */ }
   }
   return prefs;
 }
@@ -92,8 +95,9 @@ async function refreshTheme() {
     if (prefWrites) return;
     const prefs = await api.get_prefs();
     if (prefWrites) return;
-    const themeChanged = prefs.theme && prefs.theme !== themeChoice;
-    if (themeChanged) { themeChoice = prefs.theme; syncTheme(); }
+    const choice = prefs.theme || "system";
+    const themeChanged = choice !== themeChoice;
+    if (themeChanged) { themeChoice = choice; syncTheme(); }
     const miniChanged = prefs.mini && JSON.stringify(prefs.mini) !== JSON.stringify(miniPrefs);
     if (miniChanged) {
       miniPrefs = prefs.mini;
@@ -106,17 +110,8 @@ function syncTheme() {
   const theme = THEMES[themeChoice] ? themeChoice : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   document.documentElement.dataset.theme = theme;
   $("meta[name=theme-color]").content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
-  const button = $("#themeBtn");
-  button.title = button.ariaLabel = `目前主題：${THEMES[theme][0]}，點擊切換主題`;
-  button.replaceChildren(icon(THEMES[theme][1]));
 }
 function bindTheme() {
-  $("#themeBtn").onclick = () => {
-    const keys = Object.keys(THEMES);
-    themeChoice = keys[(keys.indexOf(document.documentElement.dataset.theme) + 1) % keys.length];
-    savePref("theme", themeChoice);
-    syncTheme();
-  };
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncTheme);
   syncTheme();
 }
@@ -134,7 +129,7 @@ function fmtTime(iso) {
 const splitTags = (s) => s.split(/[,，]/).map((x) => x.trim()).filter(Boolean);
 const today = () => new Date().toLocaleDateString("sv");
 // 頂端的新增框、搜尋框不會被重新繪製，游標停在那裡時照樣自動更新
-const editing = () => dragging || document.activeElement?.closest(".detail, #more, #aiPanel, .day-add, select");
+const editing = () => dragging || document.activeElement?.closest(".detail, #more, #settingsPanel, .day-add, select");
 async function copy(text, msg = "已複製") {
   await navigator.clipboard.writeText(text);
   toast(msg);
@@ -233,6 +228,12 @@ function renderItem(t) {
   return item;
 }
 
+function assigneeOptions(current = "") {
+  const defaults = ["me", "claude", "codex"];
+  const others = [...new Set([...S.todos.map(t => t.assignee), current].filter(v => v && !defaults.includes(v)))].sort();
+  return ["", ...defaults, ...others].map(value => h("option", { value, selected: value === current }, value || "不指定"));
+}
+
 function renderDetail(t) {
   const field = (label, el) => h("label", {}, h("span", {}, label), el);
   const select = (key, labels) => h("select", { onchange: (e) => save(t.id, { [key]: e.target.value }) },
@@ -268,7 +269,8 @@ function renderDetail(t) {
     field("標題", text("title")),
     field("背景", context),
     h("div", { class: "row" }, field("狀態", select("status", STATUS_LABEL)), field("優先", select("priority", PRIORITY_LABEL))),
-    h("div", { class: "row" }, field("專案", text("project", { list: "projects" })), field("負責", text("assignee", { list: "assignees" }))),
+    h("div", { class: "row" }, field("專案", text("project", { list: "projects" })), field("負責", h("select", {
+      onchange: e => save(t.id, { assignee: e.target.value }) }, assigneeOptions(t.assignee)))),
     h("div", { class: "row" },
       field("期限", text("due", { type: "date" })),
       field("標籤", h("input", { value: t.tags.join(", "), onchange: (e) => save(t.id, { tags: splitTags(e.target.value) }) }))),
@@ -305,6 +307,7 @@ function render() {
   $("#filterProject").replaceChildren(h("option", { value: "" }, "全部專案"),
     ...projects.map((p) => h("option", { value: p, selected: p === project }, p)));
   $("#projects").replaceChildren(...projects.map((p) => h("option", { value: p })));
+  $("#newAssignee").replaceChildren(...assigneeOptions($("#newAssignee").value));
 
   const matches = (t) => (!project || t.project === project) &&
     (!query || [t.title, t.context, t.project, ...t.tags, ...t.notes.map((n) => n.text)].join("\n").toLowerCase().includes(query));
@@ -320,9 +323,12 @@ function render() {
   board.replaceChildren();
   if (S.view === "calendar") { renderCalendar(board, filtered); return; }
   if (S.view === "trash") { renderTrash(board, S.trash.filter(matches)); return; }
+  const groups = h("div", { class: "board-groups" });
+  board.append(groups);
   for (const status of ["doing", "todo", "blocked"]) {
     const items = visible.filter((t) => t.status === status);
-    if (items.length) board.append(h("h2", {}, STATUS_LABEL[status], h("small", {}, items.length)), ...items.map(renderItem));
+    if (items.length) groups.append(h("section", { class: "board-group" },
+      h("h2", {}, STATUS_LABEL[status], h("small", {}, items.length)), items.map(renderItem)));
   }
   const done = visible.filter((t) => t.status === "done");
   if (done.length) {
@@ -334,7 +340,7 @@ function render() {
   }
   if (!visible.length) {
     board.append(h("p", { class: "empty" }, S.todos.length ? "沒有符合的待辦" : "還沒有待辦，從上面新增第一個吧",
-      !S.todos.length && !REMOTE && h("br"), !S.todos.length && !REMOTE && "按右上角的「接上 AI」按鈕"));
+      !S.todos.length && !REMOTE && h("br"), !S.todos.length && !REMOTE && "打開設定裡的「接上 AI」"));
   }
   board.scrollTop = scroll;
 }
@@ -391,20 +397,8 @@ function bindMain() {
   $("#filterQuery").oninput = render;
   $("#miniBtn").onclick = () => call("show_mini");
   if (DEV) $("#miniBtn").classList.add("hidden");
-  $("#aiBtn").onclick = openAiPanel;
-  if (REMOTE) ["aiBtn", "miniBtn", "mobileBtn"].forEach(id => $(`#${id}`).classList.add("hidden"));
-  $("#mobileBtn").onclick = async () => {
-    $("#mobilePanel").classList.remove("hidden");
-    $("#mobileBody").textContent = "正在偵測 Tailscale…";
-    try { renderMobile(await call("mobile_info")); } catch { $("#mobileBody").textContent = "讀取失敗，請關閉後重試"; }
-  };
-  $("#mobileClose").onclick = () => $("#mobilePanel").classList.add("hidden");
-  $("#mobilePanel").onclick = e => { if (e.target.id === "mobilePanel") $("#mobileClose").click(); };
-  $("#aiClose").onclick = () => $("#aiPanel").classList.add("hidden");
-  $("#aiPanel").onclick = (e) => { if (e.target.id === "aiPanel") $("#aiPanel").classList.add("hidden"); };
+  if (REMOTE) $("#miniBtn").classList.add("hidden");
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") $("#aiPanel").classList.add("hidden");
-    if (e.key === "Escape") $("#mobilePanel").classList.add("hidden");
     if (e.key === "n" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("#newTitle").focus(); }
     if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, textarea, select, [contenteditable]")) return;
     if (e.key === "/") { e.preventDefault(); $("#filterQuery").focus(); }
@@ -413,16 +407,15 @@ function bindMain() {
 }
 
 // ---------- 接上 AI ----------
-function renderMobile(info) {
+function renderMobile(info, body) {
   const toggle = checkbox({ checked: info.enabled, "aria-label": "手機存取" });
   const enabled = toggle.querySelector("input");
   const port = h("input", { type: "number", min: 1, max: 65535, value: info.port, "aria-label": "連接埠" });
   const configure = async (regenerate = false) => {
-    try { renderMobile(await call("mobile_configure", enabled.checked, Number(port.value), regenerate)); }
+    try { renderMobile(await call("mobile_configure", enabled.checked, Number(port.value), regenerate), body); }
     catch { enabled.checked = info.enabled; }
   };
   enabled.onchange = () => configure();
-  const body = $("#mobileBody");
   body.replaceChildren(
     h("label", { class: "mobile-toggle" }, toggle, "開啟手機存取"),
     h("div", { class: "row" }, h("label", {}, "連接埠", port), h("button", { onclick: () => configure() }, "套用")),
@@ -437,7 +430,7 @@ function renderMobile(info) {
   if (!info.logged_in) {
     body.append(h("p", {}, "在電腦和手機安裝 Tailscale，登入同一個帳號，並確認電腦已連線。"),
       link("https://tailscale.com/download", "Tailscale 官網與下載"),
-      info.tailscale_error && h("pre", { class: "cmd" }, info.tailscale_error));
+      ...(info.tailscale_error ? [h("pre", { class: "cmd" }, info.tailscale_error)] : []));
   } else if (info.serve_enable_url) {
     body.append(h("p", { class: "danger" }, "你的 Tailscale 網路還沒開啟 Serve（HTTPS）。"),
       h("p", {}, "打開下面的網址，用你的 Tailscale 帳號登入並按啟用，完成後回來再按一次「幫我設定」。"),
@@ -446,7 +439,7 @@ function renderMobile(info) {
         h("button", { onclick: () => copy(info.serve_enable_url) }, "複製網址")),
       h("button", { onclick: async e => {
         e.target.disabled = true;
-        try { renderMobile(await call("mobile_setup")); }
+        try { renderMobile(await call("mobile_setup"), body); }
         catch (err) { body.append(h("pre", { class: "cmd" }, err.message)); }
         finally { e.target.disabled = false; }
       } }, "幫我設定"));
@@ -454,7 +447,7 @@ function renderMobile(info) {
     body.append(h("p", {}, "將 HTTPS 443 轉到這個連接埠："), h("pre", { class: "cmd" }, info.command),
       h("button", { onclick: async e => {
         e.target.disabled = true;
-        try { renderMobile(await call("mobile_setup")); }
+        try { renderMobile(await call("mobile_setup"), body); }
         catch (err) { body.append(h("pre", { class: "cmd" }, err.message)); }
         finally { e.target.disabled = false; }
       } }, "幫我設定"));
@@ -464,16 +457,11 @@ function renderMobile(info) {
     qr.innerHTML = info.qr_svg;
     body.append(qr, h("button", { onclick: () => copy(info.pair_url) }, "複製網址"));
   } else if (!info.enabled) body.append(h("p", {}, "開啟手機存取後即可配對。"));
-  body.append(h("button", { onclick: async () => renderMobile(await call("mobile_info")) }, "重新偵測"),
+  body.append(h("button", { onclick: async () => renderMobile(await call("mobile_info"), body) }, "重新偵測"),
     h("p", { class: "hint" }, "iPhone：用 Safari 開啟，按分享 →「加入主畫面」。Android：用 Chrome 開啟，選「安裝應用程式」。電腦要開著 App，手機才能使用；縮到系統匣後仍可連線。"));
 }
 
-async function openAiPanel() {
-  $("#aiPanel").classList.remove("hidden");
-  renderAi(await call("info"));
-}
-
-function renderAi(info) {
+function renderAi(info, body) {
   const check = (ok, text) => h("div", { class: ok ? "ok" : "" }, icon(ok ? "checkbox-on" : "checkbox"), text);
   const tool = (name, key, st, manual) => {
     const done = st.mcp && st.instructions;
@@ -483,7 +471,7 @@ function renderAi(info) {
         h("button", { class: done ? "" : "primary", onclick: async (e) => {
           e.target.disabled = true;
           try {
-            renderAi(await call(key));
+            renderAi(await call(key), body);
             toast(`${name} 設定完成，重新開啟 ${name} 後生效`, 4000);
           } finally {
             e.target.disabled = false;
@@ -496,7 +484,7 @@ function renderAi(info) {
       h("details", {}, h("summary", {}, "手動設定"), manual));
   };
   const s = info.status;
-  $("#aiBody").replaceChildren(
+  body.replaceChildren(
     h("p", { class: "hint" }, "設定好之後，在 Claude Code 或 Codex 裡說「看一下我的待辦」「處理 #3」，它就會自己讀背景、記進度、完成後回報。"),
     tool("Claude Code", "setup_claude", s.claude,
       h("div", {}, h("pre", { class: "cmd" }, info.claude_command),
@@ -521,6 +509,10 @@ function bindMini() {
   $("#app").classList.add("hidden");
   $("#mini").classList.remove("hidden");
   $("#miniAddBtn").onclick = () => { miniAdding = !miniAdding; renderMini(); if (miniAdding) $("#miniTitle").focus(); };
+  $("#miniLayout").onclick = () => {
+    const layouts = Object.keys(MINI_LAYOUTS);
+    updateMiniPref({ layout: layouts[(layouts.indexOf(miniPrefs.layout) + 1) % layouts.length] });
+  };
   $("#miniTitle").onkeydown = e => { if (e.key === "Escape") { miniAdding = false; renderMini(); $("#miniAddBtn").focus(); } };
   $("#miniAdd").onsubmit = async (e) => {
     e.preventDefault();
@@ -704,7 +696,7 @@ async function init() {
   init.started = true;
   api = window.pywebview?.api || httpApi();
   const prefs = await loadPrefs();
-  themeChoice = prefs.theme;
+  themeChoice = prefs.theme || "system";
   if (prefs.mini) miniPrefs = prefs.mini;
   if (VIEWS[prefs.view]) S.view = prefs.view;
   bindTheme();

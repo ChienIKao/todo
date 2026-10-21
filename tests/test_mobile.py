@@ -191,6 +191,18 @@ def test_ui_prefs_persist_in_file(tmp_path, monkeypatch):
     assert "get_prefs" not in server.REMOTE_METHODS and "set_prefs" not in server.REMOTE_METHODS
 
 
+@pytest.mark.parametrize("theme", ["system", "dark", "light", "beige"])
+def test_ui_theme_choices(tmp_path, monkeypatch, theme):
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
+    api = Api()
+    assert "theme" not in api.get_prefs()
+    assert api.set_prefs({"theme": theme})["theme"] == theme
+    assert Api().get_prefs()["theme"] == theme
+    assert api.set_prefs({"theme": "invalid"})["theme"] == theme
+    (tmp_path / "ui.json").write_text('{"theme": "invalid"}', encoding="utf-8")
+    assert "theme" not in api.get_prefs()
+
+
 def test_mini_prefs_defaults_and_partial_updates(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path))
     api = Api()
