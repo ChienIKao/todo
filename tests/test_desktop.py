@@ -145,3 +145,12 @@ def test_mini_window_stays_on_scaled_screen(monkeypatch, dpi, width, expected):
     monkeypatch.setattr(api.sys, "platform", "win32")
     monkeypatch.setattr(ctypes, "windll", Mock(user32=Mock(GetDpiForSystem=Mock(return_value=dpi))), raising=False)
     assert api._mini_x(width) == expected
+
+
+def test_webview_storage_is_app_specific(monkeypatch, tmp_path):
+    import main
+    monkeypatch.delenv("AGENT_TODO_HOME", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert main._webview_storage() == str(tmp_path / "AgentTodo" / "WebView2")
+    monkeypatch.setenv("AGENT_TODO_HOME", str(tmp_path / "data"))
+    assert main._webview_storage() == str(tmp_path / "data" / "WebView2")
