@@ -1,4 +1,6 @@
+import os
 import sys
+from pathlib import Path
 
 from agent_todo import server, store
 from agent_todo.api import Api
@@ -13,6 +15,14 @@ def _redirect_output() -> None:
         store.data_dir().mkdir(parents=True, exist_ok=True)
         log = open(store.data_dir() / "app.log", "a", encoding="utf-8", buffering=1)  # noqa: SIM115
         sys.stdout = sys.stderr = log
+
+
+def _webview_storage() -> str:
+    """自己的 WebView2 資料夾。沒指定時 pywebview 會用共用的 %APPDATA%\\pywebview，
+    其他 pywebview 程式先開就會共用同一個瀏覽器程序和它的縮放設定，畫面變大、點擊偏移"""
+    if os.environ.get("AGENT_TODO_HOME") or not os.environ.get("LOCALAPPDATA"):
+        return str(store.data_dir() / "WebView2")
+    return str(Path(os.environ["LOCALAPPDATA"]) / "AgentTodo" / "WebView2")
 
 
 def _single_instance() -> bool:
@@ -90,7 +100,7 @@ def main() -> None:
     desktop = Desktop(api, window)
     window.events.closing += desktop.closing
     try:
-        webview.start(desktop.start, debug="--debug" in sys.argv, private_mode=False)
+        webview.start(desktop.start, debug="--debug" in sys.argv, private_mode=False, storage_path=_webview_storage())
     finally:
         api._mobile.stop()
         desktop.stop.set()
