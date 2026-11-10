@@ -476,22 +476,26 @@ function renderMobile(info, body) {
   body.append(h("section", { class: "tool claude-chat" },
     h("b", {}, "讓 Claude chat 使用（公開網址）"),
     h("label", { class: "mobile-toggle" }, publicToggle, "開啟公開網址"),
-    h("p", { class: "hint" }, "開啟後網址會在公開網路上，任何人都連得到登入頁，但沒有配對或連線碼進不來。"),
+    h("p", { class: "hint" }, "開啟後網址會在公開網路上，整個 App（含手機版網頁）都會連得到公開網路，但沒有配對網址或連線碼進不來。"),
     info.mcp_url && h("div", {}, h("pre", { class: "cmd" }, info.mcp_url),
       h("button", { onclick: () => copy(info.mcp_url) }, "複製網址"),
       h("p", {}, "claude.ai → 設定 → 連接器 → 新增自訂連接器 → 貼上網址 → 連線時輸入連線碼。")),
     !info.enabled && h("p", { class: "hint" }, "請先開啟手機存取，讓電腦 App 提供連線服務。"),
     h("button", { disabled: !info.mcp_url, onclick: async () => {
-      const result = await call("mobile_connect_code");
-      codeBox.replaceChildren(h("pre", { class: "cmd" }, result.code),
-        h("p", { class: "hint" }, `到期：${date(result.expires_at)}；用過即失效。`));
+      try {
+        const result = await call("mobile_connect_code");
+        codeBox.replaceChildren(h("pre", { class: "cmd" }, result.code),
+          h("p", { class: "hint" }, `到期：${date(result.expires_at)}；用過即失效。`));
+      } catch (err) { codeBox.replaceChildren(h("pre", { class: "cmd" }, err.message)); }
     } }, "產生連線碼"), codeBox, clientsBox,
     h("div", { class: "row" }, h("button", { onclick: loadClients }, "更新連線清單"),
       h("button", { class: "danger", onclick: async () => {
         if (!confirm("撤銷全部 Claude 連線？現有授權會立即失效，之後需重新連線。")) return;
-        await call("mobile_oauth_revoke");
-        codeBox.replaceChildren();
-        await loadClients();
+        try {
+          await call("mobile_oauth_revoke");
+          codeBox.replaceChildren();
+          await loadClients();
+        } catch (err) { codeBox.replaceChildren(h("pre", { class: "cmd" }, err.message)); }
       } }, "撤銷全部"))));
   loadClients().catch(() => {});
 }

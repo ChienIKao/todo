@@ -17,8 +17,11 @@ from . import store
 
 _LOCK = threading.RLock()
 _ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-_PAGE_HEADERS = {"Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'",
-                 "X-Frame-Options": "DENY"}
+# 表單送出後會 303 轉回 Claude，Chrome 對轉址目標也檢查 form-action。
+# no-referrer 會讓瀏覽器在表單 POST 帶 Origin: null，授權頁改用 same-origin。
+_PAGE_HEADERS = {"Content-Security-Policy": "default-src 'none'; form-action 'self' https://claude.ai https://claude.com; "
+                                            "frame-ancestors 'none'",
+                 "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin"}
 
 
 class OAuthError(ValueError):
@@ -36,7 +39,8 @@ def _database():
     # 每次重讀，讓撤銷立即生效；整個讀改寫流程共用一把鎖。
     with _LOCK:
         path = store.data_dir() / "oauth.json"
-        db = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        before = path.read_text(encoding="utf-8") if path.exists() else ""
+        db = json.loads(before) if before else {}
         for key in ("clients", "requests", "codes", "tokens"):
             db.setdefault(key, {})
         now = time.time()
@@ -46,10 +50,12 @@ def _database():
             yield db
         finally:
             # 失敗的兌換也必須存下單次使用及錯誤次數的變更。
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temp = path.with_suffix(".tmp")
-            temp.write_text(json.dumps(db, ensure_ascii=False, indent=2), encoding="utf-8")
-            temp.replace(path)
+            after = json.dumps(db, ensure_ascii=False, indent=2)
+            if after != before:  # 只讀的呼叫（每次 MCP 驗證）不重寫檔案
+                path.parent.mkdir(parents=True, exist_ok=True)
+                temp = path.with_suffix(".tmp")
+                temp.write_text(after, encoding="utf-8")
+                temp.replace(path)
 
 
 def base_url(host):
@@ -91,8 +97,6 @@ def register(data):
     uris = data.get("redirect_uris")
     if not isinstance(uris, list) or not uris or not all(_valid_redirect(uri) for uri in uris):
         raise OAuthError("invalid_redirect_uri", "回呼網址只能使用 https://claude.ai/ 或 https://claude.com/")
-    if data.get("token_endpoint_auth_method", "none") != "none":
-        raise OAuthError("invalid_client_metadata", "只支援公開客戶端")
     name = data.get("client_name", "Claude chat")
     if not isinstance(name, str):
         raise OAuthError("invalid_client_metadata", "客戶端名稱必須是文字")
@@ -117,6 +121,7 @@ def new_connect_code():
     expires = time.time() + 600
     with _database() as db:
         db["connect_code"] = {"hash": _hash(code), "expires_at": expires}
+        db["failures"] = []  # 使用者在電腦上重新產生，表示是本人，重新計算錯誤次數
     return {"code": code, "expires_at": expires}
 
 
@@ -247,5 +252,8 @@ def validate_access(value, resource):
         if (not record or record["kind"] != "access" or record["resource"] != resource
                 or record["client_id"] not in db["clients"]):
             return False
-        db["clients"][record["client_id"]]["last_used_at"] = time.time()
+        client = db["clients"][record["client_id"]]
+        now = time.time()
+        if now - (client["last_used_at"] or 0) > 60:  # 最後使用時間精確到分鐘就夠
+            client["last_used_at"] = now
         return True

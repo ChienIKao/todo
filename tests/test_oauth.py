@@ -390,3 +390,22 @@ def test_oauth_endpoints_only_remote():
         httpd.shutdown()
         httpd.server_close()
         thread.join()
+
+
+def test_review_fixes(remote):
+    # 註冊要求其他認證方式時改用 none，不拒絕
+    status, _, body = remote("/oauth/register", "POST", data={"redirect_uris": [REDIRECT], "token_endpoint_auth_method": "client_secret_post"})
+    assert status == 201 and json.loads(body)["token_endpoint_auth_method"] == "none"
+    client = register(remote)
+    _, (_, headers, _) = begin(remote, client)
+    # 授權頁不能用 no-referrer（表單 POST 會變 Origin: null），且 form-action 要允許轉回 Claude
+    assert headers["Referrer-Policy"] == "same-origin"
+    assert "https://claude.ai" in headers["Content-Security-Policy"]
+    # 錯五次作廢後，重新產生的連線碼重新計算錯誤次數
+    for _ in range(5):
+        rid, _ = begin(remote, client)
+        remote("/oauth/authorize", "POST", form={"request_id": rid, "decision": "allow", "connect_code": "WRONG"})
+    code = oauth.new_connect_code()["code"]
+    rid, _ = begin(remote, client)
+    remote("/oauth/authorize", "POST", form={"request_id": rid, "decision": "allow", "connect_code": "WRONG"})
+    authorize(remote, client, connect_code=code)

@@ -100,7 +100,7 @@ def create_server(dev_api=None, port: int = 0, token=None):
             handle = mcp.Handler()
             handle.author = "claude-chat"
             if msg["method"] == "initialize":
-                msg["params"] = {**msg.get("params", {}), "protocolVersion": "2025-06-18", "clientInfo": {}}
+                msg["params"] = {**msg.get("params", {}), "clientInfo": {}}
             response = handle(msg)
             if "id" not in msg or response is None:
                 return self._oauth_reply(None, 202)
@@ -234,7 +234,8 @@ def create_server(dev_api=None, port: int = 0, token=None):
             self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith(("text/", "application/json")) else ""))
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Referrer-Policy", "no-referrer")
+            if "Referrer-Policy" not in (headers or {}):
+                self.send_header("Referrer-Policy", "no-referrer")
             for key, value in (headers or {}).items():
                 self.send_header(key, value)
             self.end_headers()
