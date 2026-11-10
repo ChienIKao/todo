@@ -411,11 +411,14 @@ function renderMobile(info, body) {
   const toggle = checkbox({ checked: info.enabled, "aria-label": "手機存取" });
   const enabled = toggle.querySelector("input");
   const port = h("input", { type: "number", min: 1, max: 65535, value: info.port, "aria-label": "連接埠" });
+  const publicToggle = checkbox({ checked: info.public, "aria-label": "讓 Claude chat 使用（公開網址）" });
+  const publicInput = publicToggle.querySelector("input");
   const configure = async (regenerate = false) => {
-    try { renderMobile(await call("mobile_configure", enabled.checked, Number(port.value), regenerate), body); }
-    catch { enabled.checked = info.enabled; }
+    try { renderMobile(await call("mobile_configure", enabled.checked, Number(port.value), regenerate, publicInput.checked), body); }
+    catch { enabled.checked = info.enabled; publicInput.checked = info.public; }
   };
   enabled.onchange = () => configure();
+  publicInput.onchange = () => configure();
   body.replaceChildren(
     h("label", { class: "mobile-toggle" }, toggle, "開啟手機存取"),
     h("div", { class: "row" }, h("label", {}, "連接埠", port), h("button", { onclick: () => configure() }, "套用")),
@@ -432,7 +435,7 @@ function renderMobile(info, body) {
       link("https://tailscale.com/download", "Tailscale 官網與下載"),
       ...(info.tailscale_error ? [h("pre", { class: "cmd" }, info.tailscale_error)] : []));
   } else if (info.serve_enable_url) {
-    body.append(h("p", { class: "danger" }, "你的 Tailscale 網路還沒開啟 Serve（HTTPS）。"),
+    body.append(h("p", { class: "danger" }, `你的 Tailscale 網路還沒開啟 ${info.public ? "Funnel（公開 HTTPS）" : "Serve（HTTPS）"}。`),
       h("p", {}, "打開下面的網址，用你的 Tailscale 帳號登入並按啟用，完成後回來再按一次「幫我設定」。"),
       h("pre", { class: "cmd" }, info.serve_enable_url),
       h("div", { class: "row" }, h("button", { class: "primary", onclick: () => call("open_url", info.serve_enable_url) }, "在瀏覽器開啟"),
@@ -443,8 +446,8 @@ function renderMobile(info, body) {
         catch (err) { body.append(h("pre", { class: "cmd" }, err.message)); }
         finally { e.target.disabled = false; }
       } }, "幫我設定"));
-  } else if (!info.serve_ready) {
-    body.append(h("p", {}, "將 HTTPS 443 轉到這個連接埠："), h("pre", { class: "cmd" }, info.command),
+  } else if (!info.serve_ready || !info.consistent) {
+    body.append(h("p", {}, info.status_message || "將 HTTPS 443 轉到這個連接埠："), h("pre", { class: "cmd" }, info.command),
       h("button", { onclick: async e => {
         e.target.disabled = true;
         try { renderMobile(await call("mobile_setup"), body); }
@@ -459,6 +462,38 @@ function renderMobile(info, body) {
   } else if (!info.enabled) body.append(h("p", {}, "開啟手機存取後即可配對。"));
   body.append(h("button", { onclick: async () => renderMobile(await call("mobile_info"), body) }, "重新偵測"),
     h("p", { class: "hint" }, "iPhone：用 Safari 開啟，按分享 →「加入主畫面」。Android：用 Chrome 開啟，選「安裝應用程式」。電腦要開著 App，手機才能使用；縮到系統匣後仍可連線。"));
+  const codeBox = h("div", { "aria-live": "polite" });
+  const clientsBox = h("div", { "aria-live": "polite" });
+  const date = value => value ? new Date(value * 1000).toLocaleString("zh-TW") : "尚未使用";
+  const loadClients = async () => {
+    const clients = await call("mobile_oauth_clients");
+    clientsBox.replaceChildren(h("b", {}, "已連線的 Claude"),
+      clients.length ? h("ul", {}, clients.map(client => h("li", {},
+        h("b", {}, client.client_name),
+        h("p", { class: "hint" }, `建立：${date(client.created_at)}；最後使用：${date(client.last_used_at)}；${client.has_valid_token ? "授權有效" : "授權已過期"}`))))
+        : h("p", { class: "hint" }, "尚無已連線的 Claude"));
+  };
+  body.append(h("section", { class: "tool claude-chat" },
+    h("b", {}, "讓 Claude chat 使用（公開網址）"),
+    h("label", { class: "mobile-toggle" }, publicToggle, "開啟公開網址"),
+    h("p", { class: "hint" }, "開啟後網址會在公開網路上，任何人都連得到登入頁，但沒有配對或連線碼進不來。"),
+    info.mcp_url && h("div", {}, h("pre", { class: "cmd" }, info.mcp_url),
+      h("button", { onclick: () => copy(info.mcp_url) }, "複製網址"),
+      h("p", {}, "claude.ai → 設定 → 連接器 → 新增自訂連接器 → 貼上網址 → 連線時輸入連線碼。")),
+    !info.enabled && h("p", { class: "hint" }, "請先開啟手機存取，讓電腦 App 提供連線服務。"),
+    h("button", { disabled: !info.mcp_url, onclick: async () => {
+      const result = await call("mobile_connect_code");
+      codeBox.replaceChildren(h("pre", { class: "cmd" }, result.code),
+        h("p", { class: "hint" }, `到期：${date(result.expires_at)}；用過即失效。`));
+    } }, "產生連線碼"), codeBox, clientsBox,
+    h("div", { class: "row" }, h("button", { onclick: loadClients }, "更新連線清單"),
+      h("button", { class: "danger", onclick: async () => {
+        if (!confirm("撤銷全部 Claude 連線？現有授權會立即失效，之後需重新連線。")) return;
+        await call("mobile_oauth_revoke");
+        codeBox.replaceChildren();
+        await loadClients();
+      } }, "撤銷全部"))));
+  loadClients().catch(() => {});
 }
 
 function renderAi(info, body) {

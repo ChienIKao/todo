@@ -121,9 +121,24 @@ args = ["mcp"]
 4. 用手機掃面板上的 QR code 配對
 5. iPhone 用 Safari 開，按分享 →「加入主畫面」；Android 用 Chrome 開，選「安裝應用程式」
 
-連線只在你的 Tailscale 網路裡，外人連不到；配對網址等於鑰匙，不要外流。按「重新產生 token」會讓所有手機都要重新配對。連不到電腦時，手機會顯示上次的清單（唯讀）。
+預設連線只在你的 Tailscale 網路裡，外人連不到；配對網址等於鑰匙，不要外流。按「重新產生 token」會讓所有手機都要重新配對。連不到電腦時，手機會顯示上次的清單（唯讀）。
 
 電腦關機時也能用的雲端同步還在規劃中，見 [#1](../../issues/1)。
+
+## 在 Claude chat 使用
+
+Claude chat 的自訂連接器由 Anthropic 伺服器連回電腦，需要透過 Tailscale Funnel 提供公開 HTTPS 網址。
+
+- 電腦安裝並登入 Tailscale，在 App「手機存取」面板開啟手機存取。
+- 在「讓 Claude chat 使用（公開網址）」開啟公開網址，按「幫我設定」。第一次可能需要開啟面板提供的 Tailscale 網址，登入後啟用 Funnel，再回來按一次「幫我設定」。
+- 就緒後複製面板的 MCP 網址（`https://<電腦名稱>.ts.net/mcp`）。
+- 到 claude.ai → 設定 → 連接器 → 新增自訂連接器，貼上網址。
+- 在電腦 App 按「產生連線碼」，連線授權頁輸入連線碼後按「允許」。連線碼十分鐘內有效，用過即失效；十分鐘內輸入錯誤五次需重新產生。已配對的瀏覽器可以直接按「允許」。
+- 連線後可在 Claude chat 說「看我的待辦」，或請它新增、更新待辦及記錄筆記；筆記作者顯示為 `claude-chat`。
+
+**電腦必須開著 App**（縮到系統匣也可以）。開啟 Funnel 後，任何人都能連到公開網址及登入頁；待辦與 MCP 仍需配對或 OAuth 授權。請妥善保管配對網址及連線碼，只允許你自己發起的連線。OAuth access token 一小時有效，refresh token 三十天有效且每次更新會輪替。
+
+面板的「已連線的 Claude」可查看授權及最後使用時間；按「撤銷全部」會立即撤銷所有 Claude 授權，之後需重新連線。要停止公開服務，關閉公開網址後按「幫我設定」，確認狀態一致，恢復只限 Tailscale 網路內存取。
 
 ## `todo` 指令
 
@@ -165,6 +180,7 @@ AI 用 `todo` 指令寫筆記時加上 `--by claude-code` 或 `--by codex`，筆
 | `~/.agent-todo/todos.json` | 待辦資料（App、`todo` 指令、MCP server 共用） |
 | `~/.agent-todo/TODO.md` | 唯讀快照，給沒接 MCP 的 AI 讀 |
 | `~/.agent-todo/settings.json` | 手機存取設定與配對 token |
+| `~/.agent-todo/oauth.json` | Claude chat 客戶端、授權請求及 token 雜湊 |
 
 環境變數 `AGENT_TODO_HOME` 可以改資料夾位置。
 

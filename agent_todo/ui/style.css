@@ -146,6 +146,7 @@ details summary::before { content: "> "; color: var(--accent); }
 details[open] summary { margin-bottom: 8px; }
 #mobileBody { display: flex; flex-direction: column; gap: 16px; }
 .mobile-toggle { display: flex; align-items: center; gap: 10px; }
+.claude-chat { display: flex; flex-direction: column; gap: 12px; }
 .pair-qr { background: var(--qr-bg); color: var(--qr-ink); border: 2px solid var(--line); box-shadow: 4px 4px 0 var(--line); padding: 16px; align-self: center; max-width: 100%; }
 .pair-qr svg { display: block; width: 100%; max-width: 280px; height: auto; image-rendering: pixelated; }
 body.mini-mode { overflow: hidden; background-image: none; }

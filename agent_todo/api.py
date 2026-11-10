@@ -102,11 +102,23 @@ class Api:
     def mobile_info(self) -> dict:
         return self._mobile.info()
 
-    def mobile_configure(self, enabled: bool, port: int = 8767, regenerate: bool = False) -> dict:
-        return self._mobile.configure(enabled, port, regenerate)
+    def mobile_configure(self, enabled: bool, port: int = 8767, regenerate: bool = False, public: bool = False) -> dict:
+        return self._mobile.configure(enabled, port, regenerate, public)
 
     def mobile_setup(self) -> dict:
         return self._mobile.setup()
+
+    def mobile_connect_code(self) -> dict:
+        from . import oauth
+        return oauth.new_connect_code()
+
+    def mobile_oauth_clients(self) -> list:
+        from . import oauth
+        return oauth.list_clients()
+
+    def mobile_oauth_revoke(self) -> dict:
+        from . import oauth
+        return oauth.revoke_all()
 
     def open_url(self, url: str) -> None:
         """用系統瀏覽器開 Tailscale 的網頁（App 視窗內點連結不會開新視窗）"""
