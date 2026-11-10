@@ -19,14 +19,14 @@ def load_settings():
     path = store.data_dir() / "settings.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     return {"enabled": bool(data.get("enabled", False)), "port": int(data.get("port", 8767)),
-            "token": data.get("token", "")}
+            "token": data.get("token", ""), "public": bool(data.get("public", False))}
 
 
 def save_settings(data):
     port = int(data["port"])
     if not 1 <= port <= 65535:
         raise ValueError("連接埠必須介於 1 到 65535")
-    data = {**data, "port": port}
+    data = {**data, "port": port, "public": bool(data.get("public", False))}
     if data["enabled"] and not data.get("token"):
         data["token"] = secrets.token_urlsafe(32)
     path = store.data_dir() / "settings.json"
@@ -59,9 +59,9 @@ def parse_status(status, serve, port):
     proxy = urlparse(handler.get("Proxy", ""))
     ready = (logged_in and serve.get("TCP", {}).get("443", {}).get("HTTPS") is True
              and proxy.scheme == "http" and proxy.hostname in ("127.0.0.1", "localhost")
-             and proxy.port == port and proxy.path in ("", "/")
-             and not serve.get("AllowFunnel", {}).get(f"{dns}:443", False))
-    return {"dns": dns, "logged_in": logged_in, "serve_ready": bool(ready)}
+             and proxy.port == port and proxy.path in ("", "/"))
+    return {"dns": dns, "logged_in": logged_in, "serve_ready": bool(ready),
+            "funnel_on": serve.get("AllowFunnel", {}).get(f"{dns}:443") is True}
 
 
 class MobileAccess:
@@ -92,9 +92,9 @@ class MobileAccess:
                 self.httpd.server_close()
                 self.httpd = None
 
-    def configure(self, enabled, port, regenerate=False):
+    def configure(self, enabled, port, regenerate=False, public=False):
         with self.lock:
-            data = save_settings({"enabled": bool(enabled), "port": port,
+            data = save_settings({"enabled": bool(enabled), "port": port, "public": public,
                                   "token": secrets.token_urlsafe(32) if regenerate else self.settings["token"]})
             if not data["enabled"] or data["port"] != self.settings["port"]:
                 self.stop()
@@ -104,26 +104,41 @@ class MobileAccess:
 
     def info(self):
         info = {"enabled": self.settings["enabled"], "port": self.settings["port"],
+                "public": self.settings["public"], "funnel_on": False,
                 "running": self.httpd is not None, "error": self.error,
-                "command": f"tailscale serve --bg {self.settings['port']}"}
+                "command": f"tailscale {'funnel' if self.settings['public'] else 'serve'} --bg {self.settings['port']}"}
         try:
             status = json.loads(_tailscale("status", "--json"))
             serve = json.loads(_tailscale("serve", "status", "--json"))
             info.update(parse_status(status, serve, self.settings["port"]))
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             info.update(logged_in=False, serve_ready=False, tailscale_error=str(exc))
-        if info["running"] and info["serve_ready"]:
+        info["consistent"] = info["funnel_on"] == info["public"]
+        info["ready"] = info["running"] and info["serve_ready"] and info["consistent"]
+        if not info["consistent"]:
+            info["status_message"] = "狀態不一致，請按「幫我設定」修正公開網址設定。"
+        if info["ready"]:
             import segno
             url = f"https://{info['dns']}/pair?{urlencode({'token': self.settings['token']})}"
             svg = io.BytesIO()
             segno.make(url, micro=False).save(svg, kind="svg", scale=5, dark="#000", light="#fff")
             info.update(pair_url=url, qr_svg=svg.getvalue().decode())
+            if info["public"]:
+                info["mcp_url"] = f"https://{info['dns']}/mcp"
         return info
 
     def setup(self):
-        # tailnet 還沒開 Serve 時，tailscale 會印出開通網址然後一直等，不會自己結束
+        # tailnet 還沒開 Serve／Funnel 時，tailscale 會印出開通網址然後一直等。
         try:
-            _tailscale("serve", "--bg", str(self.settings["port"]), timeout=15)
+            _tailscale("funnel" if self.settings["public"] else "serve", "--bg", str(self.settings["port"]), timeout=15)
+            info = self.info()
+            if not self.settings["public"] and info["funnel_on"]:
+                _tailscale("funnel", "--https=443", "off", timeout=15)
+                # 關閉 Funnel 可能同時移除代理，重新套用 tailnet 內的 Serve。
+                info = self.info()
+                if not info["serve_ready"]:
+                    _tailscale("serve", "--bg", str(self.settings["port"]), timeout=15)
+                    info = self.info()
         except subprocess.TimeoutExpired as exc:
             output = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else exc.stdout or ""
             url = _ENABLE_URL.search(output)
@@ -135,4 +150,4 @@ class MobileAccess:
             if not url:
                 raise
             return {**self.info(), "serve_enable_url": url[0]}
-        return self.info()
+        return info

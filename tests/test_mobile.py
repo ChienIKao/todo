@@ -82,7 +82,7 @@ def test_remote_methods_and_origin(remote):
 
 
 def test_settings():
-    assert mobile.load_settings() == {"enabled": False, "port": 8767, "token": ""}
+    assert mobile.load_settings() == {"enabled": False, "port": 8767, "token": "", "public": False}
     data = mobile.save_settings({"enabled": True, "port": 8767, "token": ""})
     assert len(data["token"]) >= 43
     assert mobile.load_settings() == data
@@ -105,7 +105,8 @@ def test_tailscale_json_and_command(monkeypatch):
     assert not mobile.parse_status(status, serve, 8768)["serve_ready"]
     assert not mobile.parse_status({"BackendState": "NeedsLogin"}, serve, 8767)["logged_in"]
     serve["AllowFunnel"] = {"pc.tail.ts.net:443": True}
-    assert not mobile.parse_status(status, serve, 8767)["serve_ready"]
+    assert mobile.parse_status(status, serve, 8767)["serve_ready"]
+    assert mobile.parse_status(status, serve, 8767)["funnel_on"]
     monkeypatch.setattr(mobile.subprocess, "run", Mock(side_effect=FileNotFoundError("missing")))
     assert "missing" in access.info()["tailscale_error"]
 
